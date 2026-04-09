@@ -68,13 +68,12 @@
     }
     #state-line.active { color: #99b0c8; }
     #bpm-control {
-      display: none;
       pointer-events: all;
       margin-top: 22px;
       display: none;
       align-items: center;
-      gap: 12px;
-      font-size: 11px;
+      gap: 14px;
+      font-size: 13px;
       letter-spacing: 2px;
       color: #555;
     }
@@ -82,28 +81,37 @@
     #bpm-slider {
       -webkit-appearance: none;
       appearance: none;
-      width: 140px;
-      height: 1px;
+      width: clamp(180px, 40vw, 280px);
+      height: 4px;
       background: #333;
       outline: none;
       cursor: pointer;
+      /* Tall transparent padding creates a large touch target */
+      padding: 16px 0;
+      background-clip: content-box;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
     #bpm-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 10px;
-      height: 10px;
+      width: clamp(28px, 6vw, 36px);
+      height: clamp(28px, 6vw, 36px);
       border-radius: 50%;
       background: #7a8fa8;
       cursor: pointer;
     }
     #bpm-slider::-moz-range-thumb {
-      width: 10px;
-      height: 10px;
+      width: clamp(28px, 6vw, 36px);
+      height: clamp(28px, 6vw, 36px);
       border-radius: 50%;
       background: #7a8fa8;
       cursor: pointer;
       border: none;
+    }
+    #bpm-value {
+      min-width: 3ch;
+      text-align: left;
     }
   </style>
 </head>
@@ -553,7 +561,7 @@ for (let i = 0; i < BAR_COUNT; i++) {
 }
 
 // Star field — cylindrical coords stored for torsional motion
-const STAR_COUNT = 50000;
+const STAR_COUNT = 10000;
 const starPos = new Float32Array(STAR_COUNT * 3);  // live XYZ (updated each frame)
 const starCyl = new Float32Array(STAR_COUNT * 5);  // [rCyl, baseAngle, yBase, phase, speed]
 for (let i = 0; i < STAR_COUNT; i++) {
@@ -588,11 +596,21 @@ const starMat = new THREE.PointsMaterial({
 const stars = new THREE.Points(starGeo, starMat);
 scene.add(stars);
 
-// Resize
-window.addEventListener('resize', () => {
+// Resize — debounced so orientation change waits for the browser to settle
+let resizeTimer;
+function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(onResize, 150);
+});
+// orientationchange fires before dimensions update; wait an extra tick
+window.addEventListener('orientationchange', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(onResize, 300);
 });
 
 // ─── Animate ─────────────────────────────────────────────────────────────────
@@ -682,11 +700,14 @@ function animate() {
     freqBarsDown[i].material.opacity = 0.25 + val * 0.75;
   }
 
-  // ── Stars — torsional motion ──────────────────────────────────────────────────
+  // ── Stars — vortex / differential rotation ───────────────────────────────────
   const t = clock.getElapsedTime();
-  // Two overlapping sine waves give an oscillating twist that never locks in
-  const twistAmt = Math.sin(t * 0.11) * 1.8 + Math.sin(t * 0.07) * 0.9;
-  const twistDynamic = twistAmt * (1 + energy * 1.5 + bass * 4.0);
+
+  // Global spin accelerates with energy
+  const globalSpin = t * 0.07 + energy * 0.12;
+
+  // Bass surge: sharp exponential spike that decays quickly
+  const bassSurge = bass * 14 * Math.exp(-bass * 2.5);
 
   for (let i = 0; i < STAR_COUNT; i++) {
     const rCyl    = starCyl[i * 5];
@@ -695,27 +716,29 @@ function animate() {
     const phase   = starCyl[i * 5 + 3];
     const spd     = starCyl[i * 5 + 4];
 
-    // Height-dependent twist: top and bottom shear in opposite directions
-    const heightNorm  = yBase / 55;
-    const angle = baseAng
-      + twistDynamic * heightNorm * spd        // torsional shear
-      + t * 0.04 * spd;                        // slow base drift
+    // Differential rotation: inner stars orbit much faster (galaxy-like)
+    const orbitRate = (45 / (rCyl + 8)) * spd;
+    // Counter-rotating bands: alternating height bands spin opposite directions
+    const bandSign = Math.sign(Math.sin(yBase / 16 * Math.PI));
+    const angle = baseAng + globalSpin * orbitRate * bandSign;
 
-    // Radial breathing + bass-driven expansion
-    const breathe = 1.0 + Math.sin(t * 0.35 + phase) * 0.04;
-    const expand  = 1.0 + bass * 0.18 + energy * 0.06;
-    const r = rCyl * breathe * expand;
+    // Radial: individual breathing + sharp bass surge + energy swell
+    const breathe = Math.sin(t * 0.55 + phase) * (1.8 + energy * 3.5);
+    const r = rCyl + breathe + bassSurge;
 
-    // Gentle vertical pumping that scales with energy
-    const yOff = Math.sin(t * 0.28 + phase + 1.3) * (1.2 + energy * 4.0);
+    // Vertical: wave that propagates around the ring, amplitude driven by audio
+    const waveY = Math.sin(angle * 2.5 + t * 1.4 + phase) * (1.5 + energy * 7 + bass * 5);
 
     starPos[i * 3]     = Math.cos(angle) * r;
-    starPos[i * 3 + 1] = yBase + yOff;
+    starPos[i * 3 + 1] = yBase + waveY;
     starPos[i * 3 + 2] = Math.sin(angle) * r;
   }
   starGeo.attributes.position.needsUpdate = true;
 
-  _col.setHSL(hue / 360, 0.4, 0.6);
+  // Star size and brightness pulse with audio
+  starMat.size = 0.09 + energy * 0.18 + bass * 0.22;
+  starMat.opacity = 0.45 + energy * 0.35 + bass * 0.2;
+  _col.setHSL(hue / 360, 0.55, 0.65);
   starMat.color.copy(_col);
 
   // ── Camera orbit ─────────────────────────────────────────────────────────────
