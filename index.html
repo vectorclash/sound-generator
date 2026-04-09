@@ -34,36 +34,77 @@
     #start-btn {
       pointer-events: all;
       background: transparent;
-      border: 1px solid #444;
-      color: #888;
+      border: 1px solid #555;
+      color: #999;
       font-family: inherit;
-      font-size: 13px;
-      padding: 10px 28px;
+      font-size: clamp(18px, 5vw, 28px);
+      padding: clamp(16px, 4vw, 22px) clamp(40px, 10vw, 72px);
       cursor: pointer;
-      letter-spacing: 2px;
+      letter-spacing: 4px;
       text-transform: uppercase;
       transition: all 0.3s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
-    #start-btn:hover { border-color: #888; color: #ccc; }
+    #start-btn:hover { border-color: #aaa; color: #eee; }
+    #start-btn:active { border-color: #ccc; color: #fff; }
     #info {
       margin-top: 20px;
-      font-size: 12px;
-      letter-spacing: 1px;
-      color: #555;
+      font-size: 16px;
+      letter-spacing: 2px;
+      color: #778899;
       line-height: 1.8;
       transition: color 1s;
-      text-shadow: 0 0 12px rgba(100,140,200,0.4);
+      text-shadow: 0 0 18px rgba(100,140,200,0.6);
     }
-    #info.active { color: #aab8cc; }
+    #info.active { color: #ccd8e8; }
     #state-line {
-      font-size: 11px;
-      color: #444;
-      margin-top: 10px;
+      font-size: 14px;
+      color: #556677;
+      margin-top: 12px;
       letter-spacing: 2px;
       transition: color 2s;
-      text-shadow: 0 0 10px rgba(100,140,200,0.3);
+      text-shadow: 0 0 14px rgba(100,140,200,0.5);
     }
-    #state-line.active { color: #7a8fa8; }
+    #state-line.active { color: #99b0c8; }
+    #bpm-control {
+      display: none;
+      pointer-events: all;
+      margin-top: 22px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #555;
+    }
+    #bpm-control.active { display: flex; color: #7a8fa8; }
+    #bpm-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 1px;
+      background: #333;
+      outline: none;
+      cursor: pointer;
+    }
+    #bpm-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #7a8fa8;
+      cursor: pointer;
+    }
+    #bpm-slider::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #7a8fa8;
+      cursor: pointer;
+      border: none;
+    }
   </style>
 </head>
 <body>
@@ -72,6 +113,11 @@
     <button id="start-btn">PLAY</button>
     <div id="info">infinite generative music<br>shifts over time</div>
     <div id="state-line"></div>
+    <div id="bpm-control">
+      <span>BPM</span>
+      <input id="bpm-slider" type="range" min="40" max="160" step="1" value="78">
+      <span id="bpm-value">78</span>
+    </div>
   </div>
 
 <script>
@@ -467,14 +513,17 @@ const glowMat = new THREE.MeshBasicMaterial({
 const glowMesh = new THREE.Mesh(glowGeo, glowMat);
 scene.add(glowMesh);
 
-// Frequency bars — ring of 64 vertical pillars
+// Frequency bars — ring of 64 vertical pillars (up) + mirrored set (down)
 const BAR_COUNT  = 64;
 const RING_RADIUS = 3.2;
 const freqBars = [];
+const freqBarsDown = [];
 for (let i = 0; i < BAR_COUNT; i++) {
   const angle = (i / BAR_COUNT) * Math.PI * 2;
+
+  // Upward bars — pivot at bottom edge
   const bGeo = new THREE.BoxGeometry(0.1, 1, 0.1);
-  bGeo.translate(0, 0.5, 0); // pivot at bottom edge
+  bGeo.translate(0, 0.5, 0);
   const bMat = new THREE.MeshBasicMaterial({
     color: 0x446699,
     transparent: true,
@@ -483,18 +532,28 @@ for (let i = 0; i < BAR_COUNT; i++) {
     depthWrite: false,
   });
   const bar = new THREE.Mesh(bGeo, bMat);
-  bar.position.set(
-    Math.cos(angle) * RING_RADIUS,
-    -0.4,
-    Math.sin(angle) * RING_RADIUS
-  );
-  bar.userData.angle = angle;
+  bar.position.set(Math.cos(angle) * RING_RADIUS, -0.4, Math.sin(angle) * RING_RADIUS);
   scene.add(bar);
   freqBars.push(bar);
+
+  // Downward bars — pivot at top edge
+  const dGeo = new THREE.BoxGeometry(0.1, 1, 0.1);
+  dGeo.translate(0, -0.5, 0);
+  const dMat = new THREE.MeshBasicMaterial({
+    color: 0x446699,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const dBar = new THREE.Mesh(dGeo, dMat);
+  dBar.position.set(Math.cos(angle) * RING_RADIUS, -0.4, Math.sin(angle) * RING_RADIUS);
+  scene.add(dBar);
+  freqBarsDown.push(dBar);
 }
 
 // Star field — cylindrical coords stored for torsional motion
-const STAR_COUNT = 5000;
+const STAR_COUNT = 50000;
 const starPos = new Float32Array(STAR_COUNT * 3);  // live XYZ (updated each frame)
 const starCyl = new Float32Array(STAR_COUNT * 5);  // [rCyl, baseAngle, yBase, phase, speed]
 for (let i = 0; i < STAR_COUNT; i++) {
@@ -613,6 +672,16 @@ function animate() {
     freqBars[i].material.opacity = 0.25 + val * 0.75;
   }
 
+  // ── Frequency bars (downward mirror) ─────────────────────────────────────────
+  for (let i = 0; i < freqBarsDown.length; i++) {
+    const val = freqData[Math.floor(i * freqData.length / freqBarsDown.length)] / 255;
+    freqBarsDown[i].scale.y = 0.04 + val * 3.5;
+    const bh = ((hue + i * (360 / BAR_COUNT)) % 360) / 360;
+    _col.setHSL(bh, 0.85, 0.35 + val * 0.45);
+    freqBarsDown[i].material.color.copy(_col);
+    freqBarsDown[i].material.opacity = 0.25 + val * 0.75;
+  }
+
   // ── Stars — torsional motion ──────────────────────────────────────────────────
   const t = clock.getElapsedTime();
   // Two overlapping sine waves give an oscillating twist that never locks in
@@ -664,12 +733,22 @@ function animate() {
 animate();
 
 // ─── State Display ────────────────────────────────────────────────────────────
-const stateEl = document.getElementById('state-line');
-const infoEl  = document.getElementById('info');
+const stateEl  = document.getElementById('state-line');
+const infoEl   = document.getElementById('info');
+const bpmSlider = document.getElementById('bpm-slider');
+const bpmValue  = document.getElementById('bpm-value');
+
+bpmSlider.addEventListener('input', () => {
+  state.tempo = parseInt(bpmSlider.value, 10);
+  bpmValue.textContent = bpmSlider.value;
+});
 
 function updateStateDisplay() {
   const prog = Math.round((eraTimer / ERA_DURATION) * 100);
   stateEl.textContent = `${rootName()} ${scaleName()}  ·  ${Math.round(state.tempo)} bpm  ·  era ${state.era}  [${prog}%]`;
+  // Keep slider in sync when era evolution drifts the tempo
+  bpmSlider.value = Math.round(state.tempo);
+  bpmValue.textContent = Math.round(state.tempo);
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
@@ -698,10 +777,13 @@ document.getElementById('start-btn').addEventListener('click', async () => {
   document.getElementById('start-btn').style.display = 'none';
   infoEl.classList.add('active');
   stateEl.classList.add('active');
+  document.getElementById('bpm-control').classList.add('active');
 
   state.scaleIdx = 0;
   state.rootMidi = 36;
   state.tempo = 78;
+  bpmSlider.value = 78;
+  bpmValue.textContent = '78';
 
   setInterval(tick, INTERVAL);
 });
