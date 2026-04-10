@@ -3,8 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <title>Infinite Music Generator</title>
-  <!-- Three.js as a global so ES modules can reference THREE without a bundler -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <!-- Three.js via ES module importmap — no bundler required -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"
+    }
+  }
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {

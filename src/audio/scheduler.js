@@ -18,22 +18,30 @@ import { organVoice }    from './voices/organ.js';
 import { glassVoice }    from './voices/glass.js';
 import { harpVoice }     from './voices/harp.js';
 import { brassVoice }    from './voices/brass.js';
+import { drumsVoice }    from './voices/drums.js';
 
 export { bassVoice }; // re-exported so main.js can read bassVoice.style
 
 // ─── Voice pool ───────────────────────────────────────────────────────────────
 // Bass always plays. Each era draws 3–5 from this pool at random.
+// Drums are weighted with two slots so they appear ~1/3 of eras on average.
 const VOICE_POOL = [
   padVoice, melodyVoice, textureVoice, pluckVoice,
   bellVoice, arpeggioVoice, malletVoice, droneVoice, fluteVoice, choirVoice,
   stringsVoice, rhodesVoice, organVoice, glassVoice, harpVoice, brassVoice,
+  drumsVoice, drumsVoice,
 ];
 
 export let activeVoices = [];
 
 export function pickVoices() {
-  const shuffled = VOICE_POOL.slice().sort(() => Math.random() - 0.5);
-  activeVoices   = shuffled.slice(0, 3 + Math.floor(Math.random() * 3)); // 3–5
+  const seen     = new Set();
+  const shuffled = VOICE_POOL.slice().sort(() => Math.random() - 0.5).filter(v => {
+    if (seen.has(v)) return false;
+    seen.add(v);
+    return true;
+  });
+  activeVoices = shuffled.slice(0, 3 + Math.floor(Math.random() * 3)); // 3–5
 }
 
 // ─── Era / evolution ──────────────────────────────────────────────────────────
@@ -51,6 +59,7 @@ export function advanceEra() {
   state.density      = rand(0.2, 0.9);
   pickVoices();
   bassVoice.reroll();
+  drumsVoice.reroll();
 }
 
 export function evolve(dt) {

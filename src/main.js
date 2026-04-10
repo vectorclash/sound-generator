@@ -19,7 +19,7 @@ bpmSlider.addEventListener('input', () => {
 // ─── State display ────────────────────────────────────────────────────────────
 function updateStateDisplay() {
   const prog       = Math.round((eraTimer / ERA_DURATION) * 100);
-  const voiceNames = [`bass(${bassVoice.style})`, ...activeVoices.map(v => v.name)].join(' · ');
+  const voiceNames = [`bass(${bassVoice.style})`, ...activeVoices.map(v => v.style ? `${v.name}(${v.style})` : v.name)].join(' · ');
   stateEl.textContent = `${rootName()} ${scaleName()}  ·  ${Math.round(state.tempo)} bpm  ·  era ${state.era}  [${prog}%]\n${voiceNames}`;
   // Keep slider in sync when era evolution shifts the tempo
   bpmSlider.value     = Math.round(state.tempo);

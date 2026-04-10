@@ -1,5 +1,6 @@
+import * as THREE from 'three';
+
 // ─── Three.js scene setup ─────────────────────────────────────────────────────
-// THREE is loaded as a global from the CDN <script> tag in index.html.
 
 export const scene    = new THREE.Scene();
 export const camera   = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
