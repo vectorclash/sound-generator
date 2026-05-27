@@ -6,8 +6,9 @@ import { state } from '../state.js';
 
 let cameraAngle = 0;
 
-function animate() {
+function animate(timestamp) {
   requestAnimationFrame(animate);
+  clock.update(timestamp);
 
   if (!audio.started || !audio.analyser) {
     // Idle: gentle slow spin before playback starts
@@ -33,7 +34,7 @@ function animate() {
 
   // Hue shifts with musical key + era
   const hue = (state.rootMidi * 15 + state.era * 40) % 360;
-  const t   = clock.getElapsedTime();
+  const t   = clock.getElapsed();
 
   updateShapes(audio.freqData, energy, bass, hue);
   updateStars(energy, bass, hue, t);

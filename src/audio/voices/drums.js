@@ -142,6 +142,7 @@ export const drumsVoice = (() => {
     name: 'drums',
     get style() { return style; },
     reroll() { style = pick(STYLE_NAMES); },
+    setStyle(s) { style = s; },
     tick(now) {
       while (nextTime < now + LOOKAHEAD) {
         if (!nextTime) nextTime = now;

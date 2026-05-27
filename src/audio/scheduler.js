@@ -20,7 +20,12 @@ import { harpVoice }     from './voices/harp.js';
 import { brassVoice }    from './voices/brass.js';
 import { drumsVoice }    from './voices/drums.js';
 
-export { bassVoice }; // re-exported so main.js can read bassVoice.style
+export {
+  bassVoice, padVoice, melodyVoice, textureVoice, pluckVoice,
+  bellVoice, arpeggioVoice, malletVoice, droneVoice, fluteVoice,
+  choirVoice, stringsVoice, rhodesVoice, organVoice, glassVoice,
+  harpVoice, brassVoice, drumsVoice,
+};
 
 // ─── Voice pool ───────────────────────────────────────────────────────────────
 // Bass always plays. Each era draws 3–5 from this pool at random.
@@ -42,6 +47,10 @@ export function pickVoices() {
     return true;
   });
   activeVoices = shuffled.slice(0, 3 + Math.floor(Math.random() * 3)); // 3–5
+}
+
+export function setActiveVoices(voices) {
+  activeVoices = voices;
 }
 
 // ─── Era / evolution ──────────────────────────────────────────────────────────
@@ -76,15 +85,15 @@ export function evolve(dt) {
 // ─── Tick ─────────────────────────────────────────────────────────────────────
 let lastTickTime = 0;
 
-export function tick() {
+export function tick({ skipBass = false, skipEvolve = false } = {}) {
   if (!audio.started) return;
   const now = audio.ctx.currentTime;
   const dt  = now - (lastTickTime || now);
   lastTickTime = now;
 
-  bassVoice.tick(now);
+  if (!skipBass) bassVoice.tick(now);
   for (const v of activeVoices) v.tick(now);
-  evolve(dt);
+  if (!skipEvolve) evolve(dt);
 }
 
 export { TICK_MS };

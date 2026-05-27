@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Infinite Music Generator</title>
-  <!-- Three.js via ES module importmap — no bundler required -->
   <script type="importmap">
   {
     "imports": {
@@ -31,12 +30,45 @@
       z-index: 0;
     }
     #three-container canvas { display: block; }
+
+    /* ─── Root UI wrapper ──────────────────────────────────────────────────── */
     #ui {
       position: relative;
       z-index: 1;
       text-align: center;
       pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
     }
+
+    /* ─── Mode tabs ───────────────────────────────────────────────────────── */
+    #mode-tabs {
+      pointer-events: all;
+      display: flex;
+      border: 1px solid #4a5a6a;
+    }
+    .mode-tab {
+      background: transparent;
+      border: none;
+      border-right: 1px solid #4a5a6a;
+      color: #7a8a9a;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 8px 22px;
+      cursor: pointer;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      transition: color 0.2s, background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .mode-tab:last-child { border-right: none; }
+    .mode-tab:hover { color: #aabece; }
+    .mode-tab.active { color: #d0dde8; background: rgba(100,140,200,0.12); }
+
+    /* ─── Infinite mode UI ────────────────────────────────────────────────── */
     #start-btn {
       pointer-events: all;
       background: transparent;
@@ -55,7 +87,6 @@
     #start-btn:hover  { border-color: #aaa; color: #eee; }
     #start-btn:active { border-color: #ccc; color: #fff; }
     #info {
-      margin-top: 20px;
       font-size: 16px;
       letter-spacing: 2px;
       color: #778899;
@@ -67,7 +98,6 @@
     #state-line {
       font-size: 14px;
       color: #556677;
-      margin-top: 12px;
       letter-spacing: 2px;
       transition: color 2s;
       text-shadow: 0 0 14px rgba(100,140,200,0.5);
@@ -75,64 +105,374 @@
       line-height: 1.8;
     }
     #state-line.active { color: #99b0c8; }
-    #bpm-control {
-      pointer-events: all;
-      margin-top: 22px;
+
+    /* ─── Manual panel ────────────────────────────────────────────────────── */
+    #manual-ui {
       display: none;
-      align-items: center;
-      gap: 14px;
-      font-size: 13px;
-      letter-spacing: 2px;
-      color: #555;
+      pointer-events: all;
+      width: min(500px, 92vw);
+      max-height: 72vh;
+      overflow-y: auto;
+      background: rgba(4, 5, 10, 0.8);
+      border: 1px solid #4a5a6a;
+      padding: clamp(14px, 3.5vw, 26px);
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: #3a4a5a transparent;
     }
-    #bpm-control.active { display: flex; color: #7a8fa8; }
-    #bpm-slider {
+    #manual-ui.active { display: block; }
+    #manual-ui::-webkit-scrollbar { width: 3px; }
+    #manual-ui::-webkit-scrollbar-thumb { background: #3a4a5a; }
+
+    /* control rows */
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .ctrl-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: #8899aa;
+      min-width: 58px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .ctrl-unit {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: #8899aa;
+      flex-shrink: 0;
+    }
+    .ctrl-value {
+      font-size: 12px;
+      color: #aabece;
+      min-width: 3ch;
+    }
+
+    /* ─── BPM slider ─────────────────────────────────────────────────────────── */
+    #manual-bpm-slider {
       -webkit-appearance: none;
       appearance: none;
-      width: clamp(180px, 40vw, 280px);
-      height: 4px;
-      background: #333;
+      flex: 1;
+      height: 40px;
+      background: transparent;
       outline: none;
       cursor: pointer;
-      padding: 16px 0;
-      background-clip: content-box;
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
-    #bpm-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: clamp(28px, 6vw, 36px);
-      height: clamp(28px, 6vw, 36px);
-      border-radius: 50%;
-      background: #7a8fa8;
-      cursor: pointer;
+    #manual-bpm-slider::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 2px;
+      background: #4a6a80;
     }
-    #bpm-slider::-moz-range-thumb {
-      width: clamp(28px, 6vw, 36px);
-      height: clamp(28px, 6vw, 36px);
+    #manual-bpm-slider::-moz-range-track {
+      height: 4px;
+      border-radius: 2px;
+      background: #4a6a80;
+    }
+    #manual-bpm-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: clamp(26px, 6vw, 34px);
+      height: clamp(26px, 6vw, 34px);
       border-radius: 50%;
-      background: #7a8fa8;
+      background: #8aafc8;
+      cursor: pointer;
+      margin-top: -13px;
+    }
+    #manual-bpm-slider::-moz-range-thumb {
+      width: clamp(26px, 6vw, 34px);
+      height: clamp(26px, 6vw, 34px);
+      border-radius: 50%;
+      background: #8aafc8;
       cursor: pointer;
       border: none;
     }
-    #bpm-value { min-width: 3ch; text-align: left; }
+
+
+    /* instruments */
+    .section-label {
+      font-size: 9px;
+      letter-spacing: 4px;
+      color: #6a7a8a;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    #voice-groups {
+      margin-bottom: 22px;
+    }
+
+    /* bass / drums subtype rows */
+    .voice-group {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .group-label {
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: #6a7a8a;
+      text-transform: uppercase;
+      min-width: 46px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .subtype-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+    }
+
+    /* divider between groups and grid */
+    .voices-divider {
+      border-top: 1px solid #2a3040;
+      margin: 12px 0;
+    }
+
+    /* simple voices grid */
+    .inst-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px 6px;
+    }
+
+    /* shared toggle style */
+    .inst-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .inst-toggle input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border: 1px solid #5a6a7a;
+      background: transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .inst-toggle input[type="checkbox"]:checked {
+      background: #7a9fc0;
+      border-color: #7a9fc0;
+    }
+    .inst-toggle input[type="checkbox"]:checked::after {
+      content: '';
+      position: absolute;
+      left: 2px;
+      top: -1px;
+      width: 5px;
+      height: 8px;
+      border: 2px solid #0a0a0f;
+      border-top: none;
+      border-left: none;
+      transform: rotate(45deg);
+    }
+    .inst-name {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: #7a8a9a;
+      text-transform: uppercase;
+    }
+    .inst-toggle input:checked ~ .inst-name { color: #aabece; }
+
+    /* action buttons */
+    #manual-actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .action-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid #4a5a6a;
+      color: #8899aa;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 11px 8px;
+      cursor: pointer;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      transition: border-color 0.2s, color 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .action-btn:hover:not(:disabled) { border-color: #8899aa; color: #d0dde8; }
+    .action-btn.playing { border-color: #7a8fa8; color: #aabbc8; }
+    .action-btn.recording { border-color: #8a6a6a; color: #c8a8a8; cursor: default; }
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* genre preset buttons */
+    .genre-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex: 1;
+    }
+    .genre-btn {
+      background: transparent;
+      border: 1px solid #3a4a5a;
+      color: #6a7a8a;
+      font-family: inherit;
+      font-size: 9px;
+      padding: 5px 11px;
+      cursor: pointer;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .genre-btn:hover { border-color: #6a8aaa; color: #aabece; }
+    .genre-btn.active { border-color: #7a9fc0; color: #ccdde8; background: rgba(100,150,200,0.1); }
+
+    /* root / scale dropdowns */
+    .ctrl-select {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid #4a5a6a;
+      color: #aabece;
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 1px;
+      padding: 5px 6px;
+      outline: none;
+      cursor: pointer;
+    }
+    .ctrl-select option { background: #0a0a18; color: #aabece; }
+    #manual-root  { width: 56px; }
+    #manual-scale { flex: 1; }
+
+    /* ─── Feel sliders (density / tone / space / length) ────────────────────── */
+    .feel-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      flex: 1;
+      height: 32px;
+      background: transparent;
+      outline: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .feel-slider::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 2px;
+      background: #4a6a80;
+    }
+    .feel-slider::-moz-range-track {
+      height: 4px;
+      border-radius: 2px;
+      background: #4a6a80;
+    }
+    .feel-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #8aafc8;
+      cursor: pointer;
+      margin-top: -9px;
+    }
+    .feel-slider::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #8aafc8;
+      cursor: pointer;
+      border: none;
+    }
+
+    #manual-status {
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #5a6a7a;
+      text-align: center;
+      min-height: 14px;
+      transition: color 0.5s;
+    }
+    #manual-status.active { color: #aabece; }
   </style>
 </head>
 <body>
   <div id="three-container"></div>
   <div id="ui">
-    <button id="start-btn">PLAY</button>
-    <div id="info">infinite generative music<br>shifts over time</div>
-    <div id="state-line"></div>
-    <div id="bpm-control">
-      <span>BPM</span>
-      <input id="bpm-slider" type="range" min="40" max="160" step="1" value="78">
-      <span id="bpm-value">78</span>
+
+    <!-- Mode tabs -->
+    <div id="mode-tabs">
+      <button class="mode-tab active" data-mode="infinite">INFINITE</button>
+      <button class="mode-tab" data-mode="manual">MANUAL</button>
     </div>
+
+    <!-- Infinite mode -->
+    <div id="infinite-ui">
+      <button id="start-btn">PLAY</button>
+      <div id="info">infinite generative music<br>shifts over time</div>
+      <div id="state-line"></div>
+    </div>
+
+    <!-- Manual mode -->
+    <div id="manual-ui">
+      <!-- Genre presets -->
+      <div class="ctrl-row">
+        <span class="ctrl-label">GENRE</span>
+        <div id="genre-btns" class="genre-row"></div>
+      </div>
+
+      <!-- Key + Scale -->
+      <div class="ctrl-row">
+        <span class="ctrl-label">ROOT</span>
+        <select id="manual-root" class="ctrl-select"></select>
+        <span class="ctrl-label" style="min-width:auto;padding:0 4px">SCALE</span>
+        <select id="manual-scale" class="ctrl-select"></select>
+      </div>
+
+      <!-- Timing -->
+      <div class="ctrl-row">
+        <span class="ctrl-label">BPM</span>
+        <input id="manual-bpm-slider" type="range" min="40" max="160" step="1" value="90">
+        <span id="manual-bpm-value" class="ctrl-value">90</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">LENGTH</span>
+        <input type="range" class="feel-slider" id="manual-length" min="5" max="300" step="5" value="10">
+        <span class="ctrl-value" id="manual-length-value">10s</span>
+      </div>
+
+      <!-- Feel -->
+      <div class="ctrl-row">
+        <span class="ctrl-label">DENSITY</span>
+        <input type="range" class="feel-slider" id="density-slider" min="0" max="1" step="0.01" value="0.60">
+        <span class="ctrl-value" id="density-val">0.60</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">TONE</span>
+        <input type="range" class="feel-slider" id="bright-slider" min="0" max="1" step="0.01" value="0.50">
+        <span class="ctrl-value" id="bright-val">0.50</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">SPACE</span>
+        <input type="range" class="feel-slider" id="space-slider" min="0" max="1" step="0.01" value="0.50">
+        <span class="ctrl-value" id="space-val">0.50</span>
+      </div>
+
+      <div class="section-label">INSTRUMENTS</div>
+      <div id="voice-groups"></div>
+
+      <div id="manual-actions">
+        <button class="action-btn" id="manual-play-btn" disabled>PLAY</button>
+        <button class="action-btn" id="manual-export-btn" disabled>EXPORT</button>
+      </div>
+      <div id="manual-status"></div>
+    </div>
+
   </div>
 
-  <!-- Entry point — type="module" enables ES module imports -->
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

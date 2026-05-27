@@ -107,6 +107,7 @@ export const bassVoice = (() => {
     name: 'bass',
     get style() { return style; },
     reroll() { style = pick(STYLES); },
+    setStyle(s) { style = s; },
     tick(now) {
       while (nextTime < now + LOOKAHEAD) {
         if (!nextTime) nextTime = now;
