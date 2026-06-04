@@ -41,11 +41,7 @@ for (let i = 0; i < BAR_COUNT; i++) {
 
   const dGeo = new THREE.BoxGeometry(0.1, 1, 0.1);
   dGeo.translate(0, -0.5, 0); // pivot at top — grows downward
-  const dMat = new THREE.MeshBasicMaterial({
-    color: 0x446699, transparent: true, opacity: 0.85,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  const dBar = new THREE.Mesh(dGeo, dMat);
+  const dBar = new THREE.Mesh(dGeo, bMat); // share material with up bar
   dBar.position.set(Math.cos(angle) * RING_RADIUS, -0.4, Math.sin(angle) * RING_RADIUS);
   scene.add(dBar);
   freqBarsDown.push(dBar);
@@ -67,7 +63,6 @@ export function updateShapes(freqData, energy, bass, hue) {
     pos[i] = nx * disp; pos[i + 1] = ny * disp; pos[i + 2] = nz * disp;
   }
   icoMesh.geometry.attributes.position.needsUpdate = true;
-  icoMesh.geometry.computeVertexNormals();
   _col.setHSL(hue / 360, 0.65, 0.55);
   icoMat.color.copy(_col);
   icoMesh.rotation.y += 0.003 + energy * 0.006;
@@ -87,8 +82,6 @@ export function updateShapes(freqData, energy, bass, hue) {
     freqBars[i].scale.y = 0.04 + val * 3.5;
     freqBars[i].material.color.copy(_col);
     freqBars[i].material.opacity = 0.25 + val * 0.75;
-    freqBarsDown[i].scale.y = 0.04 + val * 3.5;
-    freqBarsDown[i].material.color.copy(_col);
-    freqBarsDown[i].material.opacity = 0.25 + val * 0.75;
+    freqBarsDown[i].scale.y = 0.04 + val * 3.5; // material is shared — color/opacity update above applies
   }
 }

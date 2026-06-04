@@ -53,6 +53,6 @@ export const rhodesVoice = (() => {
         nextTime += play(nextTime);
       }
     },
-    reset(now) { nextTime = now; },
+    reset(now) { nextTime = now; lastMidi = -1; },
   };
 })();

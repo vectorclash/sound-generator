@@ -13,18 +13,23 @@ import { droneVoice }    from './voices/drone.js';
 import { fluteVoice }    from './voices/flute.js';
 import { choirVoice }    from './voices/choir.js';
 import { stringsVoice }  from './voices/strings.js';
-import { rhodesVoice }   from './voices/rhodes.js';
-import { organVoice }    from './voices/organ.js';
-import { glassVoice }    from './voices/glass.js';
-import { harpVoice }     from './voices/harp.js';
-import { brassVoice }    from './voices/brass.js';
-import { drumsVoice }    from './voices/drums.js';
+import { rhodesVoice }     from './voices/rhodes.js';
+import { organVoice }      from './voices/organ.js';
+import { glassVoice }      from './voices/glass.js';
+import { harpVoice }       from './voices/harp.js';
+import { brassVoice }      from './voices/brass.js';
+import { drumsVoice }      from './voices/drums.js';
+import { vibraphoneVoice } from './voices/vibraphone.js';
+import { clavinetVoice }   from './voices/clavinet.js';
+import { sitarVoice }      from './voices/sitar.js';
+import { kalimbaVoice }    from './voices/kalimba.js';
 
 export {
   bassVoice, padVoice, melodyVoice, textureVoice, pluckVoice,
   bellVoice, arpeggioVoice, malletVoice, droneVoice, fluteVoice,
   choirVoice, stringsVoice, rhodesVoice, organVoice, glassVoice,
   harpVoice, brassVoice, drumsVoice,
+  vibraphoneVoice, clavinetVoice, sitarVoice, kalimbaVoice,
 };
 
 // ─── Voice pool ───────────────────────────────────────────────────────────────
@@ -34,6 +39,7 @@ const VOICE_POOL = [
   padVoice, melodyVoice, textureVoice, pluckVoice,
   bellVoice, arpeggioVoice, malletVoice, droneVoice, fluteVoice, choirVoice,
   stringsVoice, rhodesVoice, organVoice, glassVoice, harpVoice, brassVoice,
+  vibraphoneVoice, clavinetVoice, sitarVoice, kalimbaVoice,
   drumsVoice, drumsVoice,
 ];
 
@@ -84,6 +90,8 @@ export function evolve(dt) {
 
 // ─── Tick ─────────────────────────────────────────────────────────────────────
 let lastTickTime = 0;
+
+export function resetTickTimer() { lastTickTime = 0; }
 
 export function tick({ skipBass = false, skipEvolve = false } = {}) {
   if (!audio.started) return;

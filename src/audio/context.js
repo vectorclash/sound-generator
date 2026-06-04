@@ -3,6 +3,7 @@
 export const audio = {
   ctx:        null,
   masterGain: null,
+  reverbGain: null,
   reverbNode: null,
   analyser:   null,
   freqData:   null,
@@ -38,13 +39,13 @@ export function initAudio() {
   audio.waveData = new Uint8Array(audio.analyser.fftSize);
 
   audio.reverbNode = buildReverb(audio.ctx);
-  const reverbGain = audio.ctx.createGain();
-  reverbGain.gain.value = 0.45;
+  audio.reverbGain = audio.ctx.createGain();
+  audio.reverbGain.gain.value = 0.45;
 
   audio.masterGain.connect(audio.analyser);
   audio.analyser.connect(audio.ctx.destination);
-  audio.reverbNode.connect(reverbGain);
-  reverbGain.connect(audio.analyser);
+  audio.reverbNode.connect(audio.reverbGain);
+  audio.reverbGain.connect(audio.analyser);
 
   audio.started = true;
 }

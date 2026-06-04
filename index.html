@@ -106,6 +106,29 @@
     }
     #state-line.active { color: #99b0c8; }
 
+    /* ─── Section label row (with inline clear button) ─────────────────────── */
+    .section-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .section-label-row .section-label { margin-bottom: 0; }
+    .clear-btn {
+      background: transparent;
+      border: 1px solid #3a4a5a;
+      color: #6a7a8a;
+      font-family: inherit;
+      font-size: 9px;
+      padding: 4px 10px;
+      cursor: pointer;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      transition: border-color 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .clear-btn:hover { border-color: #6a8aaa; color: #aabece; }
+
     /* ─── Manual panel ────────────────────────────────────────────────────── */
     #manual-ui {
       display: none;
@@ -331,6 +354,7 @@
     }
     .genre-btn:hover { border-color: #6a8aaa; color: #aabece; }
     .genre-btn.active { border-color: #7a9fc0; color: #ccdde8; background: rgba(100,150,200,0.1); }
+    .random-genre-btn { border-style: dashed; }
 
     /* root / scale dropdowns */
     .ctrl-select {
@@ -388,6 +412,44 @@
       border: none;
     }
 
+    /* ─── Export countdown + progress ──────────────────────────────────────────── */
+    #export-countdown {
+      font-size: clamp(38px, 10vw, 54px);
+      letter-spacing: 8px;
+      color: #8aafc8;
+      text-align: center;
+      height: 0;
+      line-height: 64px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.15s, height 0.15s;
+      pointer-events: none;
+    }
+    #export-countdown.active { height: 64px; opacity: 1; }
+    @keyframes countpulse {
+      0%   { opacity: 0; transform: scale(1.18); }
+      18%  { opacity: 1; transform: scale(1.00); }
+      82%  { opacity: 1; transform: scale(1.00); }
+      100% { opacity: 0.25; transform: scale(0.96); }
+    }
+    #export-countdown.pulse { animation: countpulse 0.92s ease-out forwards; }
+
+    #export-progress-wrap {
+      height: 2px;
+      background: rgba(100,140,200,0.08);
+      margin: 6px 0 12px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    #export-progress-wrap.active { opacity: 1; }
+    #export-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #3a5a78, #8aafc8);
+      transition: width 0.7s linear;
+    }
+
     #manual-status {
       font-size: 10px;
       letter-spacing: 2px;
@@ -438,12 +500,6 @@
         <input id="manual-bpm-slider" type="range" min="40" max="160" step="1" value="90">
         <span id="manual-bpm-value" class="ctrl-value">90</span>
       </div>
-      <div class="ctrl-row">
-        <span class="ctrl-label">LENGTH</span>
-        <input type="range" class="feel-slider" id="manual-length" min="5" max="300" step="5" value="10">
-        <span class="ctrl-value" id="manual-length-value">10s</span>
-      </div>
-
       <!-- Feel -->
       <div class="ctrl-row">
         <span class="ctrl-label">DENSITY</span>
@@ -461,13 +517,24 @@
         <span class="ctrl-value" id="space-val">0.50</span>
       </div>
 
-      <div class="section-label">INSTRUMENTS</div>
+      <div class="section-label-row">
+        <span class="section-label">INSTRUMENTS</span>
+        <button class="clear-btn" id="clear-instruments-btn">CLEAR</button>
+      </div>
       <div id="voice-groups"></div>
+
+      <div class="ctrl-row">
+        <span class="ctrl-label">LENGTH</span>
+        <input type="range" class="feel-slider" id="manual-length" min="5" max="300" step="5" value="10">
+        <span class="ctrl-value" id="manual-length-value">10s</span>
+      </div>
 
       <div id="manual-actions">
         <button class="action-btn" id="manual-play-btn" disabled>PLAY</button>
         <button class="action-btn" id="manual-export-btn" disabled>EXPORT</button>
       </div>
+      <div id="export-countdown"></div>
+      <div id="export-progress-wrap"><div id="export-progress-bar"></div></div>
       <div id="manual-status"></div>
     </div>
 

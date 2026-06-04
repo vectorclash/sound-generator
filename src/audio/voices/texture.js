@@ -5,7 +5,7 @@ export const textureVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
-    const { ctx, reverbNode } = audio;
+    const { ctx, masterGain, reverbNode } = audio;
     const wait = beat() * rand(1, 4);
     if (Math.random() < 0.4) return wait;
 
@@ -19,7 +19,7 @@ export const textureVoice = (() => {
     env.gain.linearRampToValueAtTime(gain, t + 0.15);
     env.gain.exponentialRampToValueAtTime(0.001, t + dur);
     wet.gain.value = 0.9;
-    osc.connect(env); env.connect(wet); wet.connect(reverbNode);
+    osc.connect(env); env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
     osc.start(t); osc.stop(t + dur + 0.1);
     return wait;
   }

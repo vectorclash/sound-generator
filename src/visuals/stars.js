@@ -6,23 +6,75 @@ const texLoader = new THREE.TextureLoader();
 const smallTex  = texLoader.load('images/star-sprite-small.png');
 const largeTex  = texLoader.load('images/star-sprite-large.png');
 
+// ─── Star cluster config ──────────────────────────────────────────────────────
+const CLUSTER = {
+  // Octave frequencies — controls cluster SIZE (smaller = bigger/wider clusters)
+  freqLarge:  0.04,   // large arm-scale structure  (~25 unit wavelength)
+  freqMid:    0.10,   // medium sub-clusters         (~10 unit wavelength)
+  freqFine:   0.28,   // fine grain                  (~3.5 unit wavelength)
+
+  // Octave amplitudes — must sum to 1.0
+  ampLarge:   0.60,
+  ampMid:     0.28,
+  ampFine:    0.12,
+
+  // Contrast — power applied to density before acceptance test
+  // 1 = soft/even,  2 = noticeable,  3 = sharp clusters with clear voids,  4+ = extreme
+  contrast:   7,
+
+  // Fill — multiplier on the acceptance probability
+  // Lower = more stars rejected (sparser overall), higher = denser clusters
+  // At fill=3.5, regions with d>0.7 are always accepted; d=0.25 regions accept ~5%
+  fill:       3.5,
+};
+
+// ─── 3D value noise for organic star clustering ───────────────────────────────
+function nHash(x, y, z) {
+  const n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+function nLerp(a, b, t) { return a + (b - a) * t; }
+function nSmooth(t) { return t * t * (3 - 2 * t); }
+function valueNoise(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const fx = nSmooth(x - ix), fy = nSmooth(y - iy), fz = nSmooth(z - iz);
+  return nLerp(
+    nLerp(nLerp(nHash(ix,   iy,   iz  ), nHash(ix+1, iy,   iz  ), fx),
+          nLerp(nHash(ix,   iy+1, iz  ), nHash(ix+1, iy+1, iz  ), fx), fy),
+    nLerp(nLerp(nHash(ix,   iy,   iz+1), nHash(ix+1, iy,   iz+1), fx),
+          nLerp(nHash(ix,   iy+1, iz+1), nHash(ix+1, iy+1, iz+1), fx), fy),
+    fz
+  );
+}
+function clusterDensity(x, y, z) {
+  return valueNoise(x * CLUSTER.freqLarge, y * CLUSTER.freqLarge, z * CLUSTER.freqLarge) * CLUSTER.ampLarge
+       + valueNoise(x * CLUSTER.freqMid,   y * CLUSTER.freqMid,   z * CLUSTER.freqMid)   * CLUSTER.ampMid
+       + valueNoise(x * CLUSTER.freqFine,  y * CLUSTER.freqFine,  z * CLUSTER.freqFine)  * CLUSTER.ampFine;
+}
+
 // ─── Layer factory ────────────────────────────────────────────────────────────
 function makeStarLayer(count, rMin, rMax, speedMin, speedMax) {
   const pos = new Float32Array(count * 3);
   const cyl = new Float32Array(count * 5); // [rCyl, baseAngle, yBase, phase, speed]
-  for (let i = 0; i < count; i++) {
+  let placed = 0;
+  while (placed < count) {
     const theta = Math.random() * Math.PI * 2;
     const phi   = Math.acos(2 * Math.random() - 1);
     const r     = rMin + Math.random() * (rMax - rMin);
     const x = r * Math.sin(phi) * Math.cos(theta);
     const y = r * Math.sin(phi) * Math.sin(theta);
     const z = r * Math.cos(phi);
-    cyl[i * 5]     = Math.sqrt(x * x + z * z);
-    cyl[i * 5 + 1] = Math.atan2(z, x);
-    cyl[i * 5 + 2] = y;
-    cyl[i * 5 + 3] = Math.random() * Math.PI * 2;
-    cyl[i * 5 + 4] = speedMin + Math.random() * (speedMax - speedMin);
-    pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
+    // Rejection sample: accept with probability proportional to noise density.
+    // Squaring sharpens the contrast between dense clusters and empty voids.
+    const d = clusterDensity(x, y, z);
+    if (Math.random() > Math.pow(d, CLUSTER.contrast) * CLUSTER.fill) continue;
+    cyl[placed * 5]     = Math.sqrt(x * x + z * z);
+    cyl[placed * 5 + 1] = Math.atan2(z, x);
+    cyl[placed * 5 + 2] = y;
+    cyl[placed * 5 + 3] = Math.random() * Math.PI * 2;
+    cyl[placed * 5 + 4] = speedMin + Math.random() * (speedMax - speedMin);
+    pos[placed * 3] = x; pos[placed * 3 + 1] = y; pos[placed * 3 + 2] = z;
+    placed++;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -52,7 +104,7 @@ const largeSpriteMat = new THREE.SpriteMaterial({
 });
 const largeSprites = [];
 for (let i = 0; i < LARGE_COUNT; i++) {
-  const sprite = new THREE.Sprite(largeSpriteMat.clone());
+  const sprite = new THREE.Sprite(largeSpriteMat); // shared — color updates once per frame
   sprite.userData.baseScale = 1.5 + Math.random() * 5.5; // 1.5–7.0
   sprite.scale.setScalar(sprite.userData.baseScale);
   sprite.position.set(largeLayer.pos[i * 3], largeLayer.pos[i * 3 + 1], largeLayer.pos[i * 3 + 2]);
@@ -112,6 +164,7 @@ export function updateStars(energy, bass, hue, t) {
   smallMat.opacity = 0.9;
 
   _col.setHSL(((hue + 180) % 360) / 360, 0.90, 0.80);
+  largeSpriteMat.color.copy(_col); // one update shared by all sprites
   const audioPulse = 1.0 + energy * 0.6 + bass * 0.5;
   for (let i = 0; i < LARGE_COUNT; i++) {
     largeSprites[i].position.set(
@@ -120,6 +173,5 @@ export function updateStars(energy, bass, hue, t) {
       largeLayer.pos[i * 3 + 2],
     );
     largeSprites[i].scale.setScalar(largeSprites[i].userData.baseScale * audioPulse);
-    largeSprites[i].material.color.copy(_col);
   }
 }
