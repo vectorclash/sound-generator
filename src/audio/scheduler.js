@@ -91,7 +91,7 @@ export function evolve(dt) {
 // ─── Tick ─────────────────────────────────────────────────────────────────────
 let lastTickTime = 0;
 
-export function resetTickTimer() { lastTickTime = 0; }
+export function resetTickTimer() { lastTickTime = 0; eraTimer = 0; }
 
 export function tick({ skipBass = false, skipEvolve = false } = {}) {
   if (!audio.started) return;

@@ -19,9 +19,11 @@ export const padVoice = (() => {
       const env  = ctx.createGain(),       wet  = ctx.createGain();
       osc.type = 'sawtooth'; osc.frequency.value = hz; osc.detune.value = rand(-8, 8);
       filt.type = 'lowpass'; filt.frequency.value = lerp(400, 2400, state.brightness); filt.Q.value = 1.2;
+      const attackEnd = t + 0.8;
+      const sustainAt = t + Math.max(0.8, dur - 1.0);
       env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain, t + 0.8);
-      env.gain.setValueAtTime(gain, t + dur - 1.0);
+      env.gain.linearRampToValueAtTime(gain, attackEnd);
+      env.gain.setValueAtTime(gain, sustainAt);
       env.gain.linearRampToValueAtTime(0, t + dur);
       wet.gain.value = lerp(0.2, 0.8, state.spaciousness);
       osc.connect(filt); filt.connect(env);

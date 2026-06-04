@@ -18,9 +18,11 @@ export const droneVoice = (() => {
       osc.type = Math.random() < 0.5 ? 'sawtooth' : 'square';
       osc.frequency.value = hz; osc.detune.value = rand(-6, 6);
       filt.type = 'lowpass'; filt.frequency.value = lerp(200, 800, state.brightness); filt.Q.value = 0.8;
+      const attackEnd = t + 2.5;
+      const sustainAt = t + Math.max(2.5, dur - 2.5);
       env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain, t + 2.5);
-      env.gain.setValueAtTime(gain, t + dur - 2.5);
+      env.gain.linearRampToValueAtTime(gain, attackEnd);
+      env.gain.setValueAtTime(gain, sustainAt);
       env.gain.linearRampToValueAtTime(0, t + dur);
       wet.gain.value = lerp(0.4, 0.9, state.spaciousness);
       osc.connect(filt); filt.connect(env);

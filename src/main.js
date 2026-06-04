@@ -350,9 +350,11 @@ function updateInfiniteDisplay() {
   stateEl.textContent = `${rootName()} ${scaleName()}  ·  ${Math.round(state.tempo)} bpm  ·  era ${state.era}  [${prog}%]\n${voiceNames}`;
 }
 
-startBtn.addEventListener('click', () => {
+startBtn.addEventListener('click', async () => {
   if (infiniteRunning) return;
-  if (!audio.started) initAudio();
+  if (!audio.started || audio.ctx?.state === 'closed') initAudio();
+  if (audio.ctx.state === 'suspended') await audio.ctx.resume();
+  unmuteAudio();
 
   startBtn.style.display = 'none';
   infoEl.classList.add('active');
@@ -391,9 +393,9 @@ function getManualVoices() {
   return voices;
 }
 
-function manualInit() {
-  if (!audio.started) initAudio();
-  if (audio.ctx.state === 'suspended') audio.ctx.resume();
+async function manualInit() {
+  if (!audio.started || audio.ctx?.state === 'closed') initAudio();
+  if (audio.ctx.state === 'suspended') await audio.ctx.resume();
   unmuteAudio();
 
   state.tempo        = parseInt(bpmSlider.value, 10);
@@ -480,7 +482,7 @@ function stopManualPlayback() {
 }
 
 // ─── Manual play ─────────────────────────────────────────────────────────────
-manualPlayBtn.addEventListener('click', () => {
+manualPlayBtn.addEventListener('click', async () => {
   if (manualPlaying) {
     stopManualPlayback();
     manualStatus.textContent = '';
@@ -488,7 +490,7 @@ manualPlayBtn.addEventListener('click', () => {
     return;
   }
 
-  manualInit();
+  await manualInit();
   manualPlaying = true;
   manualPlayBtn.textContent = 'STOP';
   manualPlayBtn.classList.add('playing');
@@ -558,13 +560,13 @@ manualExportBtn.addEventListener('click', () => {
     }, i * 1000);
   });
 
-  exportPreTimeout = setTimeout(() => {
+  exportPreTimeout = setTimeout(async () => {
     exportPreTimeout = null;
     if (exportId !== myId) return;
     exportCountdown.classList.remove('active', 'pulse');
     manualStatus.textContent = '';
 
-    manualInit();
+    await manualInit();
     const skipBass = enabledBassSubtypes().length === 0;
 
     // Schedule a 5 ms micro-ramp to silence at exactly durationSec on the
