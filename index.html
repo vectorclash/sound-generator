@@ -86,8 +86,10 @@
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
-    #start-btn:hover  { border-color: #aaa; color: #eee; }
-    #start-btn:active { border-color: #ccc; color: #fff; }
+    #start-btn:hover           { border-color: #aaa; color: #eee; }
+    #start-btn:active          { border-color: #ccc; color: #fff; }
+    #start-btn.playing         { border-color: #556; color: #778; }
+    #start-btn.playing:hover   { border-color: #99aacc; color: #bbccdd; }
     #info {
       font-size: 16px;
       letter-spacing: 2px;
@@ -660,6 +662,7 @@
       <div id="manual-actions">
         <button class="action-btn" id="manual-play-btn" disabled>PLAY</button>
         <button class="action-btn" id="manual-export-btn" disabled>EXPORT</button>
+        <button class="action-btn" id="manual-share-btn">SHARE</button>
       </div>
       <div id="export-countdown"></div>
       <div id="export-progress-wrap"><div id="export-progress-bar"></div></div>

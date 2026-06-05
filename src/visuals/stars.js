@@ -4,27 +4,60 @@ import { scene } from './scene.js';
 // ─── Sprite textures ──────────────────────────────────────────────────────────
 const texLoader = new THREE.TextureLoader();
 const smallTex  = texLoader.load('images/star-sprite-small.png');
-const largeTex  = texLoader.load('images/star-sprite-large.png');
+
+// Large star: original PNG for the halo glow (works fine with additive blending),
+// plus a generated overlay with the center core + hard glare lines
+// (white-on-transparent so they correctly receive material.color tinting).
+const largeTex = texLoader.load('images/star-sprite-large.png');
+
+function makeLargeCoreTex() {
+  const sz = 256, c = sz / 2;
+  const cv  = document.createElement('canvas');
+  cv.width  = cv.height = sz;
+  const ctx = cv.getContext('2d');
+
+  // Horizontal glare line: crisp 2px, fades tip-to-tip
+  const hg = ctx.createLinearGradient(0, 0, sz, 0);
+  hg.addColorStop(0.00, 'rgba(255,255,255,0)');
+  hg.addColorStop(0.28, 'rgba(255,255,255,0.40)');
+  hg.addColorStop(0.50, 'rgba(255,255,255,1.0)');
+  hg.addColorStop(0.72, 'rgba(255,255,255,0.40)');
+  hg.addColorStop(1.00, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(0, c - 1, sz, 2);
+
+  // Vertical glare line
+  const vg = ctx.createLinearGradient(0, 0, 0, sz);
+  vg.addColorStop(0.00, 'rgba(255,255,255,0)');
+  vg.addColorStop(0.28, 'rgba(255,255,255,0.40)');
+  vg.addColorStop(0.50, 'rgba(255,255,255,1.0)');
+  vg.addColorStop(0.72, 'rgba(255,255,255,0.40)');
+  vg.addColorStop(1.00, 'rgba(255,255,255,0)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(c - 1, 0, 2, sz);
+
+  // Bright core point — larger radius so it blends into the spike intersection
+  const core = ctx.createRadialGradient(c, c, 0, c, c, c * 0.18);
+  core.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+  core.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+  core.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = core;
+  ctx.fillRect(0, 0, sz, sz);
+
+  return new THREE.CanvasTexture(cv);
+}
+
+const largeCoreTex = makeLargeCoreTex();
 
 // ─── Star cluster config ──────────────────────────────────────────────────────
 const CLUSTER = {
-  // Octave frequencies — controls cluster SIZE (smaller = bigger/wider clusters)
-  freqLarge:  0.04,   // large arm-scale structure  (~25 unit wavelength)
-  freqMid:    0.10,   // medium sub-clusters         (~10 unit wavelength)
-  freqFine:   0.28,   // fine grain                  (~3.5 unit wavelength)
-
-  // Octave amplitudes — must sum to 1.0
+  freqLarge:  0.04,
+  freqMid:    0.10,
+  freqFine:   0.28,
   ampLarge:   0.60,
   ampMid:     0.28,
   ampFine:    0.12,
-
-  // Contrast — power applied to density before acceptance test
-  // 1 = soft/even,  2 = noticeable,  3 = sharp clusters with clear voids,  4+ = extreme
   contrast:   7,
-
-  // Fill — multiplier on the acceptance probability
-  // Lower = more stars rejected (sparser overall), higher = denser clusters
-  // At fill=3.5, regions with d>0.7 are always accepted; d=0.25 regions accept ~5%
   fill:       3.5,
 };
 
@@ -52,10 +85,41 @@ function clusterDensity(x, y, z) {
        + valueNoise(x * CLUSTER.freqFine,  y * CLUSTER.freqFine,  z * CLUSTER.freqFine)  * CLUSTER.ampFine;
 }
 
+// ─── Assign a color personality to each star at creation time ─────────────────
+// Returns { hueFixed, hueVal, satVal, litVal }
+//   hueFixed = true  → hueVal is an absolute hue (0–1), ignores musical hue
+//   hueFixed = false → hueVal is a signed offset added to the musical hue
+function starColorPersonality() {
+  const t = Math.random();
+  if (t < 0.38) {
+    // Musical — tracks the palette hue with a small individual offset
+    return { hueFixed: false, hueVal: (Math.random() - 0.5) * 0.08,
+             satVal: 0.80 + Math.random() * 0.20, litVal: 0.48 + Math.random() * 0.16 };
+  } else if (t < 0.62) {
+    // Blue-white (O/B type) — fixed cool hue regardless of music
+    return { hueFixed: true,  hueVal: 0.55 + Math.random() * 0.10,
+             satVal: 0.65 + Math.random() * 0.30, litVal: 0.52 + Math.random() * 0.18 };
+  } else if (t < 0.80) {
+    // Warm orange/red (K/M type) — fixed warm hue
+    return { hueFixed: true,  hueVal: 0.04 + Math.random() * 0.06,
+             satVal: 0.85 + Math.random() * 0.15, litVal: 0.45 + Math.random() * 0.18 };
+  } else {
+    // Near-white / neutral — low saturation, any hue
+    return { hueFixed: false, hueVal: (Math.random() - 0.5) * 0.20,
+             satVal: 0.08 + Math.random() * 0.18, litVal: 0.65 + Math.random() * 0.20 };
+  }
+}
+
 // ─── Layer factory ────────────────────────────────────────────────────────────
 function makeStarLayer(count, rMin, rMax, speedMin, speedMax) {
-  const pos = new Float32Array(count * 3);
-  const cyl = new Float32Array(count * 5); // [rCyl, baseAngle, yBase, phase, speed]
+  const pos      = new Float32Array(count * 3);
+  const cyl      = new Float32Array(count * 5);
+  const colors   = new Float32Array(count * 3);
+  const hueFixed = new Uint8Array(count);
+  const hueVal   = new Float32Array(count);
+  const satVal   = new Float32Array(count);
+  const litVal   = new Float32Array(count);
+
   let placed = 0;
   while (placed < count) {
     const theta = Math.random() * Math.PI * 2;
@@ -64,21 +128,29 @@ function makeStarLayer(count, rMin, rMax, speedMin, speedMax) {
     const x = r * Math.sin(phi) * Math.cos(theta);
     const y = r * Math.sin(phi) * Math.sin(theta);
     const z = r * Math.cos(phi);
-    // Rejection sample: accept with probability proportional to noise density.
-    // Squaring sharpens the contrast between dense clusters and empty voids.
     const d = clusterDensity(x, y, z);
     if (Math.random() > Math.pow(d, CLUSTER.contrast) * CLUSTER.fill) continue;
+
     cyl[placed * 5]     = Math.sqrt(x * x + z * z);
     cyl[placed * 5 + 1] = Math.atan2(z, x);
     cyl[placed * 5 + 2] = y;
     cyl[placed * 5 + 3] = Math.random() * Math.PI * 2;
     cyl[placed * 5 + 4] = speedMin + Math.random() * (speedMax - speedMin);
     pos[placed * 3] = x; pos[placed * 3 + 1] = y; pos[placed * 3 + 2] = z;
+
+    const p = starColorPersonality();
+    hueFixed[placed] = p.hueFixed ? 1 : 0;
+    hueVal[placed]   = p.hueVal;
+    satVal[placed]   = p.satVal;
+    litVal[placed]   = p.litVal;
+
     placed++;
   }
+
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  return { pos, cyl, geo };
+  geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+  return { pos, cyl, geo, colors, hueFixed, hueVal, satVal, litVal };
 }
 
 // ─── Small star layer (Points) ────────────────────────────────────────────────
@@ -86,33 +158,51 @@ export const SMALL_COUNT = 7500;
 const smallLayer = makeStarLayer(SMALL_COUNT, 10, 45, 0.4, 1.4);
 
 const smallMat = new THREE.PointsMaterial({
-  size: 0.6, map: smallTex, color: 0x99ccff,
+  size: 0.6, map: smallTex,
+  vertexColors: true, color: 0xffffff,
   transparent: true, opacity: 0.9,
   blending: THREE.AdditiveBlending, depthWrite: false,
   sizeAttenuation: true, alphaTest: 0.01, fog: false,
 });
 scene.add(new THREE.Points(smallLayer.geo, smallMat));
 
-// ─── Large star layer (Sprites — no GPU point-size cap) ───────────────────────
+// ─── Large star layer (Sprites — individual materials for per-star color) ──────
 export const LARGE_COUNT = 80;
 const largeLayer = makeStarLayer(LARGE_COUNT, 8, 35, 0.2, 0.7);
 
-const largeSpriteMat = new THREE.SpriteMaterial({
-  map: largeTex, color: 0xff99cc,
-  transparent: true, opacity: 1.0,
-  blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-});
 const largeSprites = [];
+const coreSprites  = [];
 for (let i = 0; i < LARGE_COUNT; i++) {
-  const sprite = new THREE.Sprite(largeSpriteMat); // shared — color updates once per frame
-  sprite.userData.baseScale = 1.5 + Math.random() * 5.5; // 1.5–7.0
-  sprite.scale.setScalar(sprite.userData.baseScale);
-  sprite.position.set(largeLayer.pos[i * 3], largeLayer.pos[i * 3 + 1], largeLayer.pos[i * 3 + 2]);
-  scene.add(sprite);
-  largeSprites.push(sprite);
+  const baseScale = 1.5 + Math.random() * 5.5;
+  const px = largeLayer.pos[i * 3], py = largeLayer.pos[i * 3 + 1], pz = largeLayer.pos[i * 3 + 2];
+
+  // Halo sprite — original PNG, handles the soft outer glow
+  const haloMat = new THREE.SpriteMaterial({
+    map: largeTex, color: 0xffffff,
+    transparent: true, opacity: 1.0,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  });
+  const halo = new THREE.Sprite(haloMat);
+  halo.userData.baseScale = baseScale;
+  halo.scale.setScalar(baseScale);
+  halo.position.set(px, py, pz);
+  scene.add(halo);
+  largeSprites.push(halo);
+
+  // Core overlay — generated texture, handles center point + hard glare lines
+  const coreMat = new THREE.SpriteMaterial({
+    map: largeCoreTex, color: 0xffffff,
+    transparent: true, opacity: 1.0,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  });
+  const core = new THREE.Sprite(coreMat);
+  core.scale.setScalar(baseScale);
+  core.position.set(px, py, pz);
+  scene.add(core);
+  coreSprites.push(core);
 }
 
-// ─── Flow field constants (irrational ratios → aperiodic organic motion) ─────
+// ─── Flow field constants ─────────────────────────────────────────────────────
 const PHI = 1.6180339887, RT2 = 1.4142135623, RT3 = 1.7320508075;
 
 function applyFlow(pos, cyl, count, ft, audioMod) {
@@ -122,21 +212,17 @@ function applyFlow(pos, cyl, count, ft, audioMod) {
     const yBase   = cyl[i * 5 + 2];
     const phase   = cyl[i * 5 + 3];
     const spd     = cyl[i * 5 + 4];
-    // Spatial seeds — nearby stars share similar values → coherent flow
     const sx = baseAng, sy = yBase * 0.016, sr = rCyl * 0.011;
-    // Angular drift
     const angFlow =
         Math.sin(sx * PHI      + ft * 0.71 + phase)          * 0.07
       + Math.sin(sy * RT2      + ft * 0.44 * PHI + sr)       * 0.04
       + Math.sin(sx * RT3 + sy * PHI + ft * 0.29)            * 0.025;
     const angle = baseAng + angFlow * spd + ft * 0.025 * spd;
-    // Radial breathing
     const radFlow =
         Math.sin(sx * RT2      + ft * 0.51 + phase * PHI)    * 2.2
       + Math.sin(sy * PHI      + ft * 0.28 * RT2 + sr * RT3) * 1.1
       + Math.sin(sr            + ft * 0.19 + phase)          * 0.7;
     const r = rCyl + radFlow * audioMod;
-    // Vertical undulation
     const yFlow =
         Math.sin(sx            + ft * 0.58 + phase * RT2)    * 2.2
       + Math.sin(sy * RT3 + sx * PHI * 0.4 + ft * 0.35)     * 1.4
@@ -158,20 +244,37 @@ export function updateStars(energy, bass, hue, t) {
   applyFlow(largeLayer.pos, largeLayer.cyl, LARGE_COUNT, ft, audioMod);
   smallLayer.geo.attributes.position.needsUpdate = true;
 
-  _col.setHSL(((hue + 30)  % 360) / 360, 0.75, 0.70);
-  smallMat.color.copy(_col);
-  smallMat.size    = 0.6  + energy * 0.15 + bass * 0.10;
+  // Per-star vertex colors: fixed types (blue-white, warm) hold their hue;
+  // musical types drift with the palette hue
+  const baseH = ((hue + 30) % 360) / 360;
+  const { colors, hueFixed, hueVal, satVal, litVal } = smallLayer;
+  for (let i = 0; i < SMALL_COUNT; i++) {
+    const h = hueFixed[i] ? hueVal[i] : (baseH + hueVal[i] + 1) % 1;
+    _col.setHSL(h, satVal[i], litVal[i]);
+    colors[i * 3]     = _col.r;
+    colors[i * 3 + 1] = _col.g;
+    colors[i * 3 + 2] = _col.b;
+  }
+  smallLayer.geo.attributes.color.needsUpdate = true;
+  smallMat.size    = 0.6 + energy * 0.15 + bass * 0.10;
   smallMat.opacity = 0.9;
 
-  _col.setHSL(((hue + 180) % 360) / 360, 0.90, 0.80);
-  largeSpriteMat.color.copy(_col); // one update shared by all sprites
+  // Large sprites: halo (original PNG) + core overlay (generated) move and color together
   const audioPulse = 1.0 + energy * 0.6 + bass * 0.5;
+  const lh = largeLayer.hueFixed, lv = largeLayer.hueVal,
+        ls = largeLayer.satVal,   ll = largeLayer.litVal;
   for (let i = 0; i < LARGE_COUNT; i++) {
-    largeSprites[i].position.set(
-      largeLayer.pos[i * 3],
-      largeLayer.pos[i * 3 + 1],
-      largeLayer.pos[i * 3 + 2],
-    );
-    largeSprites[i].scale.setScalar(largeSprites[i].userData.baseScale * audioPulse);
+    const h = lh[i] ? lv[i] : (baseH + lv[i] + 1) % 1;
+    _col.setHSL(h, ls[i], ll[i]);
+    const px = largeLayer.pos[i * 3], py = largeLayer.pos[i * 3 + 1], pz = largeLayer.pos[i * 3 + 2];
+    const sc = largeSprites[i].userData.baseScale * audioPulse;
+
+    largeSprites[i].material.color.copy(_col);
+    largeSprites[i].position.set(px, py, pz);
+    largeSprites[i].scale.setScalar(sc);
+
+    coreSprites[i].material.color.copy(_col);
+    coreSprites[i].position.set(px, py, pz);
+    coreSprites[i].scale.setScalar(sc * 1.6);
   }
 }

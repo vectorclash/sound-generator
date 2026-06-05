@@ -56,6 +56,12 @@ const SIMPLE_VOICES = [
   { key:'sitar',      voice:sitarVoice },
   { key:'kalimba',    voice:kalimbaVoice },
 ];
+// Canonical instrument order for binary encoding (must never change)
+const ALL_INST_KEYS = [
+  ...BASS_SUBTYPES.map(s => `bass:${s}`),
+  ...DRUMS_SUBTYPES.map(s => `drums:${s}`),
+  ...SIMPLE_VOICES.map(({ key }) => key),
+]; // 34 keys → 5 bytes as bitmask
 
 // ─── UI refs ──────────────────────────────────────────────────────────────────
 const startBtn        = document.getElementById('start-btn');
@@ -84,6 +90,7 @@ const exportCountdown      = document.getElementById('export-countdown');
 const exportProgressWrap   = document.getElementById('export-progress-wrap');
 const exportProgressBar    = document.getElementById('export-progress-bar');
 const clearInstrumentsBtn  = document.getElementById('clear-instruments-btn');
+const manualShareBtn       = document.getElementById('manual-share-btn');
 const modeTabs             = document.querySelectorAll('.mode-tab');
 
 // ─── Enable state (all off by default) ───────────────────────────────────────
@@ -327,15 +334,7 @@ modeTabs.forEach(tab => {
     const mode = tab.dataset.mode;
     if (mode === currentMode) return;
 
-    if (currentMode === 'infinite' && infiniteRunning) {
-      clearInterval(infiniteInterval);
-      infiniteInterval = null;
-      infiniteRunning  = false;
-      startBtn.style.display = '';
-      infoEl.classList.remove('active');
-      stateEl.classList.remove('active');
-      stateEl.textContent = '';
-    }
+    if (currentMode === 'infinite' && infiniteRunning) stopInfinite();
     if (currentMode === 'manual' && manualPlaying) stopManualPlayback();
 
     currentMode = mode;
@@ -356,13 +355,25 @@ function updateInfiniteDisplay() {
   stateEl.textContent = `${rootName()} ${scaleName()}  ·  ${Math.round(state.tempo)} bpm  ·  era ${state.era}  [${prog}%]\n${voiceNames}`;
 }
 
+function stopInfinite() {
+  clearInterval(infiniteInterval);
+  infiniteInterval = null;
+  infiniteRunning  = false;
+  startBtn.textContent = 'PLAY';
+  startBtn.classList.remove('playing');
+  infoEl.classList.remove('active');
+  stateEl.classList.remove('active');
+  stateEl.textContent = '';
+}
+
 startBtn.addEventListener('click', async () => {
-  if (infiniteRunning) return;
+  if (infiniteRunning) { stopInfinite(); return; }
   if (!audio.started || audio.ctx?.state === 'closed') initAudio();
   if (audio.ctx.state === 'suspended') await audio.ctx.resume();
   unmuteAudio();
 
-  startBtn.style.display = 'none';
+  startBtn.textContent = 'STOP';
+  startBtn.classList.add('playing');
   infoEl.classList.add('active');
   stateEl.classList.add('active');
 
@@ -685,5 +696,90 @@ document.querySelectorAll('.section-header').forEach(header => {
   });
 });
 
+// ─── Share / restore config via URL hash ─────────────────────────────────────
+// Binary pack: 11 bytes → 15 base64url chars
+// [rootOffset(1), scale(1), tempo(1), density×100(1), brightness×100(1),
+//  spaciousness×100(1), instBitmask(5 bytes, 34 bits)]
+function encodeConfig() {
+  const b = new Uint8Array(11);
+  b[0] = state.rootMidi - 36;
+  b[1] = state.scaleIdx;
+  b[2] = state.tempo;
+  b[3] = Math.round(state.density * 100);
+  b[4] = Math.round(state.brightness * 100);
+  b[5] = Math.round(state.spaciousness * 100);
+  ALL_INST_KEYS.forEach((k, i) => {
+    if (manualEnabled[k]) b[6 + Math.floor(i / 8)] |= (1 << (i % 8));
+  });
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function decodeConfig(str) {
+  try {
+    const pad = str + '==='.slice(0, (4 - str.length % 4) % 4);
+    const b   = Uint8Array.from(atob(pad.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    return {
+      r: b[0] + 36, s: b[1], t: b[2],
+      d: b[3] / 100, b: b[4] / 100, p: b[5] / 100,
+      m: ALL_INST_KEYS.filter((_, i) => b[6 + Math.floor(i / 8)] & (1 << (i % 8))),
+    };
+  } catch { return null; }
+}
+
+function applyConfig(cfg) {
+  if (!cfg) return;
+  state.rootMidi     = cfg.r ?? state.rootMidi;
+  state.scaleIdx     = cfg.s ?? state.scaleIdx;
+  state.tempo        = cfg.t ?? state.tempo;
+  state.density      = cfg.d ?? state.density;
+  state.brightness   = cfg.b ?? state.brightness;
+  state.spaciousness = cfg.p ?? state.spaciousness;
+
+  rootSelect.value        = state.rootMidi - 36;
+  scaleSelect.value       = state.scaleIdx;
+  bpmSlider.value         = state.tempo;
+  bpmValue.textContent    = state.tempo;
+  densitySlider.value     = state.density;
+  densityVal.textContent  = state.density.toFixed(2);
+  brightSlider.value      = state.brightness;
+  brightVal.textContent   = state.brightness.toFixed(2);
+  spaceSlider.value       = state.spaciousness;
+  spaceVal.textContent    = state.spaciousness.toFixed(2);
+
+  const enabled = new Set(cfg.m || []);
+  Object.keys(manualEnabled).forEach(k => {
+    manualEnabled[k] = enabled.has(k);
+    if (cbElements[k]) cbElements[k].checked = enabled.has(k);
+  });
+  updatePlayEnabled();
+}
+
+manualShareBtn.addEventListener('click', () => {
+  const hash = `c=${encodeConfig()}`;
+  history.replaceState(null, '', `#${hash}`);
+  navigator.clipboard.writeText(window.location.href).then(() => {
+    manualShareBtn.textContent = 'COPIED!';
+  }).catch(() => {
+    manualShareBtn.textContent = 'LINKED!';
+  });
+  setTimeout(() => { manualShareBtn.textContent = 'SHARE'; }, 1600);
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 startAnimation();
+
+// Restore config from URL hash (after all UI is wired)
+const _hashMatch = location.hash.match(/[#&]c=([A-Za-z0-9\-_]+)/);
+if (_hashMatch) {
+  const cfg = decodeConfig(_hashMatch[1]);
+  if (cfg) {
+    applyConfig(cfg);
+    // Switch to manual tab directly — bypass the auto-randomize guard in the click handler
+    if (currentMode !== 'manual') {
+      currentMode = 'manual';
+      modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'manual'));
+      infiniteUi.style.display = 'none';
+      manualUi.classList.add('active');
+    }
+  }
+}

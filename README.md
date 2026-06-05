@@ -10,13 +10,15 @@ Open `index.html` in any modern browser.
 
 ### Infinite Mode
 
-Click **PLAY** and the system runs forever, slowly evolving through eras of music. The composition auto-generates, shifts key and scale every 38 seconds, and continuously drifts in texture and density. A live status bar shows root note, scale, tempo, era number, and era progress.
+Click **PLAY** to start. The button toggles to **STOP**, allowing playback to be halted without switching modes. The system runs indefinitely, slowly evolving through eras of music. The composition auto-generates, shifts key and scale every 38 seconds, and continuously drifts in texture and density. A live status bar shows root note, scale, tempo, era number, and era progress.
 
 ### Manual Mode
 
-Full control over every parameter. Select instruments, set BPM, key, scale, and tonal shape, then click **PLAY** or **EXPORT**.
+Full control over every parameter. The panel is divided into three collapsible sections — **GENRE**, **FEEL**, and **INSTRUMENTS** — to reduce visual clutter.
 
-**Genre presets** (AMBIENT, DARK, JAZZ, ELEC, ORCH, ZEN) instantly configure a musically coherent combination of scale, tempo, density, brightness, and spaciousness. **RANDOM** picks a fresh random combination of all parameters and instruments.
+**Genre presets** (AMBIENT, DARK, JAZZ, ELEC, ORCH, ZEN, BLUES, FOLK, DREAM, FUNK, EPIC) instantly configure a musically coherent combination of scale, tempo, density, brightness, and spaciousness. **RANDOM** picks a fresh random combination of all parameters and instruments. Entering Manual mode with no instruments selected automatically randomises.
+
+**SHARE** encodes the full current configuration — key, scale, tempo, all three feel sliders, and every enabled instrument — as an 11-byte binary payload in the URL hash (`#c=…`, 15 base64url characters). Clicking the button copies the URL to the clipboard. Loading that URL restores the exact configuration.
 
 **Controls:**
 | Control | Range | Effect |
@@ -65,28 +67,28 @@ Twenty instruments are available. In Infinite mode, each era picks 3–5 at rand
 | **Drone** | Root + fifth, sawtooth/square, very long sustain. Lowpass filter tracks brightness. |
 | **Texture** | Single long-sustain sine, 90% reverb wet. Sparse, high-register shimmer. |
 | **Strings** | Layered detuned sawtooth oscillators with slow attack (bowed string envelope). |
-| **Choir** | Two slightly detuned sines with slow LFO vibrato and a long, vowel-like envelope. |
-| **Brass** | Sawtooth through a resonant lowpass with a bright attack transient. |
-| **Organ** | Additive harmonics (fundamental + 2nd + 3rd) at drawbar-like levels, no envelope decay. |
+| **Choir** | Three detuned sawtooth oscillators (−12 / 0 / +12 cents) per chord note through a bandpass formant filter. The filter centre frequency sweeps from a vowel-like low position to a brighter one over the note duration, simulating mouth-shape movement. Sawtooths are essential here — pure sines have insufficient harmonic content at the frequencies where the bandpass resonates. |
+| **Brass** | Two detuned oscillators (±6 cents) sharing a single resonant lowpass filter (Q=3.8) for natural ensemble spread. |
+| **Organ** | Additive harmonics (fundamental + 2nd + 3rd) at drawbar-like levels. A Leslie rotary speaker effect is simulated per note: a ~7 Hz LFO with a small gain node connects to the note bus, producing ±7% amplitude modulation (rotary cabinet speed). |
 
 #### Melodic voices
 
 | Instrument | Synthesis |
 |---|---|
 | **Melody** | Sine/triangle, stepwise motion (65% chance), scales with `density`. |
-| **Flute** | Sine with 4.5–6.5 Hz amplitude LFO (vibrato). |
+| **Flute** | Sine with delayed-onset pitch vibrato (LFO connected to `frequency`, not gain — true pitch vibrato, not tremolo). Vibrato ramps in 0.28 s after attack onset to simulate a player's natural technique. Brief highpass noise burst on attack for breath transient. |
 | **Rhodes** | Sine carrier + brief inharmonic "clunk" partial on attack (7.1× fundamental). Exponential decay. |
 | **Vibraphone** | Sine fundamental + inharmonic partial at 2.756× (short metallic click). Slow 6 Hz amplitude tremolo via LFO on a gain node, simulating the motor-driven rotating discs. |
-| **Sitar** | Sawtooth main string + sine detuned 0.4% (creates jawari beating shimmer) + quiet root sympathetic string that blooms in slowly and sustains past the main note. |
+| **Sitar** | Additive synthesis (fundamental + 2nd + 3rd harmonic, each with a different exponential decay rate so higher partials die faster). A meend pitch ornament glides from a semitone above the target down to the final pitch. Jawari shimmer is simulated by a second oscillator detuned 0.3% creating a beating relationship. A narrow bandpass noise burst provides the pluck transient. Five sympathetic strings (tuned to the root, an octave up) bloom in slowly and decay independently. |
 
 #### Percussive / plucked voices
 
 | Instrument | Synthesis |
 |---|---|
 | **Pluck** | Bandpass-filtered white noise burst with fast decay. |
-| **Harp** | Sine with fast attack, long exponential decay. Arpeggiated chord patterns. |
-| **Mallet** | Fundamental + octave sine, short decay. Marimba character. |
-| **Bell** | Sine fundamental + inharmonic partials, very long decay. Heavy reverb. |
+| **Harp** | Sine fundamental + 2nd harmonic (decaying at 28% of the note duration for a brief metallic brightness on attack). Narrow bandpass noise burst (Q=30) provides the pluck transient. Arpeggiated chord patterns. |
+| **Mallet** | Fundamental + octave + 4th harmonic (the 4th is characteristic of marimba resonator tubes). Each partial has its own decay rate — higher partials die faster. |
+| **Bell** | Four inharmonic partials at 1×, 2.756×, 5.404×, and 8.801× the fundamental (a close approximation of real tubular bell mode ratios). Each partial has an independent exponential decay, so the timbre evolves over the note duration. |
 | **Glass** | Pure sine with slow attack and very long decay. Minimal harmonic content. |
 | **Arpeggio** | Rapid scale-note arpeggios, triangle oscillator. |
 | **Kalimba** | Pure sine tine + brief inharmonic partial at 5.44× (metallic click). Occasionally plays two notes with a 40 ms thumb stagger. High reverb send. |
@@ -175,17 +177,26 @@ Rendered with [Three.js r175](https://threejs.org/) via WebGL at native pixel ra
 
 **Frequency bar ring** — 64 rectangular bars in a circle of radius 3.2. Each bar maps to an FFT bin; height scales 0.04–3.54×. Colours cycle around the hue wheel with additive blending.
 
-**Star field** — 5,000 points in a shell between radii 15–95. Each star stores cylindrical coordinates `(rCyl, baseAngle, yBase, phase, speed)` and positions are recomputed every frame:
+**Star field** — 7,500 small point stars and 80 large sprite stars, placed using 3D value noise rejection sampling for organic clustering. Each star stores cylindrical coordinates and is animated every frame by a three-component aperiodic flow field using irrational-ratio frequencies (φ, √2, √3) so the motion never visibly repeats.
 
-- *Torsional shear*: twist angle = `baseAngle + twistDynamic × (yBase/55) × speed + t × 0.04 × speed`. Stars at positive and negative Y twist in opposite directions.
-- *Radial breathing*: `r = rCyl × (1 + sin(t×0.35+phase)×0.04) × (1 + bass×0.18 + energy×0.06)`
-- *Vertical pumping*: `yOffset = sin(t×0.28+phase+1.3) × (1.2 + energy×4.0)`
+Small stars use a `PointsMaterial` with `vertexColors: true` — every star has a unique colour baked at placement time. Stars are divided into four personality types:
 
-`twistDynamic = twistAmt × (1 + energy×1.5 + bass×4)` where `twistAmt = sin(t×0.11)×1.8 + sin(t×0.07)×0.9` — two incommensurate frequencies so the field never loops visibly.
+| Type | Proportion | Hue behaviour |
+|---|---|---|
+| Musical | ~38% | Follows the palette hue with a small personal offset |
+| Blue-white (O/B type) | ~24% | Fixed cool hue (~198–234°) regardless of key |
+| Warm orange/red (K/M type) | ~18% | Fixed warm hue (~14–40°) |
+| Near-white neutral | ~20% | Low saturation, any hue |
+
+Large stars are individual `Sprite` objects with two stacked layers: the original PNG for the soft diffuse halo, and a generated overlay providing the diffraction spikes and bright core. The overlay renders at 1.6× the halo scale (matching how diffraction spikes extend beyond the stellar disc in real telescope imagery). Both layers share the same per-star colour personality.
+
+**Volumetric nebulae** — 22 large cloud sprites with elliptical aspect ratios and static rotations for organic variety. Each is a soft radial gradient (white-on-transparent, generated via canvas) rendered with `AdditiveBlending` at low opacity (0.14–0.32). Colour types are weighted toward fixed deep blues, purples, and magentas, with ~20% following the palette hue. Each nebula slowly orbits with an independent speed and direction, and floats vertically on an aperiodic sine cycle (period ~63–105 seconds). Overlapping clouds accumulate intensity, producing the volumetric impression without ray-marching.
+
+**Animation fade-in** — when playback starts, `energy` and `bass` ramp from 0 to their real values over 2.5 seconds. The camera orbit radius and Y oscillation also lerp smoothly from their idle positions. This prevents an abrupt visual jump when the audio begins. Stars are animated and visible even before playback starts (at energy=0).
 
 ### Colour
 
-A single hue drives the entire palette: `hue = (rootMidi × 15 + era × 40) % 360`. Each root note has a characteristic colour; each era shifts the palette by 40°.
+A single hue drives the base palette: `hue = (rootMidi × 15 + era × 40) % 360`. Each root note has a characteristic colour; each era shifts it by 40°. Fixed-temperature star types (blue-white, warm) are anchored to their astrophysical colours and do not shift with the key.
 
 ### Camera
 
@@ -208,11 +219,15 @@ reverbNode → reverbGain   ↗
 requestAnimationFrame
   └─ animate()
        ├─ analyser.getByteFrequencyData() → freqData[]
+       ├─ fade-in ramp (0→1 over 2.5 s)  → energy, bass scaled on play start
        ├─ deform icosahedron vertices     ← freqData
        ├─ pulse inner glow                ← bass
        ├─ scale frequency bars            ← freqData
-       ├─ update 5000 star positions      ← t, energy, bass
-       ├─ advance camera angle            ← energy
+       ├─ update 7500 star vertex colours ← hue, per-star personality
+       ├─ update 7500 star positions      ← t, energy, bass (flow field)
+       ├─ update 80 large star sprites    ← hue, energy, bass
+       ├─ update 22 nebula sprites        ← hue, energy, bass, t
+       ├─ lerp camera orbit               ← energy, fade
        └─ renderer.render(scene, camera)
 
 Export path (manual mode)
