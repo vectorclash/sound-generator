@@ -108,14 +108,47 @@
     }
     #state-line.active { color: #99b0c8; }
 
-    /* ─── Section label row (with inline clear button) ─────────────────────── */
-    .section-label-row {
+    /* ─── Collapsible sections ──────────────────────────────────────────────── */
+    .collapsible-section {
+      border-top: 1px solid #1e2a3a;
+      padding-top: 10px;
+    }
+    .collapsible-section:first-child { border-top: none; padding-top: 0; }
+    .section-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
+      cursor: pointer;
+      padding-bottom: 10px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
-    .section-label-row .section-label { margin-bottom: 0; }
+    .section-header .section-label { margin-bottom: 0; }
+    .section-header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-chevron {
+      font-size: 8px;
+      color: #4a6a80;
+      transition: transform 0.22s;
+      flex-shrink: 0;
+    }
+    .collapsible-section.collapsed .section-chevron { transform: rotate(-90deg); }
+    .section-body {
+      overflow: hidden;
+      max-height: 1000px;
+      opacity: 1;
+      transition: max-height 0.3s ease, opacity 0.2s;
+    }
+    .collapsible-section.collapsed .section-body {
+      max-height: 0;
+      opacity: 0;
+    }
+
+    /* ─── Section label row (with inline clear button) ─────────────────────── */
     .clear-btn {
       background: transparent;
       border: 1px solid #3a4a5a;
@@ -144,6 +177,7 @@
       -webkit-overflow-scrolling: touch;
       scrollbar-width: thin;
       scrollbar-color: #3a4a5a transparent;
+      scrollbar-gutter: stable both-edges;
     }
     #manual-ui.active { display: block; }
     #manual-ui::-webkit-scrollbar { width: 3px; }
@@ -481,6 +515,10 @@
       .group-label { font-size: 11px; letter-spacing: 2px; }
       .ctrl-unit   { font-size: 11px; }
 
+      /* section headers: bigger tap target */
+      .section-header { padding-top: 4px; padding-bottom: 12px; }
+      .section-chevron { font-size: 10px; }
+
       /* genre buttons: bigger tap area + font */
       .genre-btn {
         font-size: 11px;
@@ -549,50 +587,71 @@
 
     <!-- Manual mode -->
     <div id="manual-ui">
-      <!-- Genre presets -->
-      <div class="ctrl-row">
-        <span class="ctrl-label">GENRE</span>
-        <div id="genre-btns" class="genre-row"></div>
+
+      <!-- Genre presets (collapsed by default) -->
+      <div class="collapsible-section collapsed" id="section-genre">
+        <div class="section-header">
+          <span class="section-label">GENRE</span>
+          <span class="section-chevron">&#9662;</span>
+        </div>
+        <div class="section-body">
+          <div class="ctrl-row" style="margin-bottom:12px">
+            <div id="genre-btns" class="genre-row"></div>
+          </div>
+        </div>
       </div>
 
-      <!-- Key + Scale -->
-      <div class="ctrl-row">
-        <span class="ctrl-label">ROOT</span>
-        <select id="manual-root" class="ctrl-select"></select>
-        <span class="ctrl-label" style="min-width:auto;padding:0 4px">SCALE</span>
-        <select id="manual-scale" class="ctrl-select"></select>
+      <!-- Feel: key, scale, BPM, sliders -->
+      <div class="collapsible-section" id="section-feel">
+        <div class="section-header">
+          <span class="section-label">FEEL</span>
+          <span class="section-chevron">&#9662;</span>
+        </div>
+        <div class="section-body">
+          <div class="ctrl-row">
+            <span class="ctrl-label">ROOT</span>
+            <select id="manual-root" class="ctrl-select"></select>
+            <span class="ctrl-label" style="min-width:auto;padding:0 4px">SCALE</span>
+            <select id="manual-scale" class="ctrl-select"></select>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">BPM</span>
+            <input id="manual-bpm-slider" type="range" min="40" max="160" step="1" value="90">
+            <span id="manual-bpm-value" class="ctrl-value">90</span>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">DENSITY</span>
+            <input type="range" class="feel-slider" id="density-slider" min="0" max="1" step="0.01" value="0.60">
+            <span class="ctrl-value" id="density-val">0.60</span>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">TONE</span>
+            <input type="range" class="feel-slider" id="bright-slider" min="0" max="1" step="0.01" value="0.50">
+            <span class="ctrl-value" id="bright-val">0.50</span>
+          </div>
+          <div class="ctrl-row" style="margin-bottom:4px">
+            <span class="ctrl-label">SPACE</span>
+            <input type="range" class="feel-slider" id="space-slider" min="0" max="1" step="0.01" value="0.50">
+            <span class="ctrl-value" id="space-val">0.50</span>
+          </div>
+        </div>
       </div>
 
-      <!-- Timing -->
-      <div class="ctrl-row">
-        <span class="ctrl-label">BPM</span>
-        <input id="manual-bpm-slider" type="range" min="40" max="160" step="1" value="90">
-        <span id="manual-bpm-value" class="ctrl-value">90</span>
-      </div>
-      <!-- Feel -->
-      <div class="ctrl-row">
-        <span class="ctrl-label">DENSITY</span>
-        <input type="range" class="feel-slider" id="density-slider" min="0" max="1" step="0.01" value="0.60">
-        <span class="ctrl-value" id="density-val">0.60</span>
-      </div>
-      <div class="ctrl-row">
-        <span class="ctrl-label">TONE</span>
-        <input type="range" class="feel-slider" id="bright-slider" min="0" max="1" step="0.01" value="0.50">
-        <span class="ctrl-value" id="bright-val">0.50</span>
-      </div>
-      <div class="ctrl-row">
-        <span class="ctrl-label">SPACE</span>
-        <input type="range" class="feel-slider" id="space-slider" min="0" max="1" step="0.01" value="0.50">
-        <span class="ctrl-value" id="space-val">0.50</span>
+      <!-- Instruments -->
+      <div class="collapsible-section" id="section-instruments">
+        <div class="section-header">
+          <span class="section-label">INSTRUMENTS</span>
+          <div class="section-header-right">
+            <button class="clear-btn" id="clear-instruments-btn">CLEAR</button>
+            <span class="section-chevron">&#9662;</span>
+          </div>
+        </div>
+        <div class="section-body">
+          <div id="voice-groups"></div>
+        </div>
       </div>
 
-      <div class="section-label-row">
-        <span class="section-label">INSTRUMENTS</span>
-        <button class="clear-btn" id="clear-instruments-btn">CLEAR</button>
-      </div>
-      <div id="voice-groups"></div>
-
-      <div class="ctrl-row">
+      <div class="ctrl-row" style="margin-top:14px">
         <span class="ctrl-label">LENGTH</span>
         <input type="range" class="feel-slider" id="manual-length" min="5" max="300" step="5" value="10">
         <span class="ctrl-value" id="manual-length-value">10s</span>

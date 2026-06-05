@@ -13,10 +13,13 @@ export const brassVoice = (() => {
     const dur   = beat() * pick([1, 1, 1.5, 2]);
     const gain  = rand(0.10, 0.16);
 
-    const osc  = ctx.createOscillator(), filt = ctx.createBiquadFilter();
-    const env  = ctx.createGain(),       wet  = ctx.createGain();
-    osc.type = 'sawtooth'; osc.frequency.value = hz;
-    filt.type = 'bandpass'; filt.Q.value = 4.5;
+    // Two detuned oscillators — ensemble width, like two players on the same part
+    const osc1 = ctx.createOscillator(), osc2 = ctx.createOscillator();
+    const filt = ctx.createBiquadFilter();
+    const env  = ctx.createGain(), wet = ctx.createGain();
+    osc1.type = 'sawtooth'; osc1.frequency.value = hz; osc1.detune.value = -6;
+    osc2.type = 'sawtooth'; osc2.frequency.value = hz; osc2.detune.value =  6;
+    filt.type = 'bandpass'; filt.Q.value = 3.8;
     // Formant sweep — lips opening then settling
     filt.frequency.setValueAtTime(hz * 1.5, t);
     filt.frequency.exponentialRampToValueAtTime(hz * 4.5, t + 0.04);
@@ -27,9 +30,10 @@ export const brassVoice = (() => {
     env.gain.setValueAtTime(gain * 0.75, t + 0.15);
     env.gain.exponentialRampToValueAtTime(0.001, t + dur);
     wet.gain.value = 0.3;
-    osc.connect(filt); filt.connect(env);
+    osc1.connect(filt); osc2.connect(filt); filt.connect(env);
     env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-    osc.start(t); osc.stop(t + dur + 0.05);
+    osc1.start(t); osc1.stop(t + dur + 0.05);
+    osc2.start(t); osc2.stop(t + dur + 0.05);
     return beat() * pick([1, 1, 2]);
   }
 

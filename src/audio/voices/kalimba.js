@@ -9,7 +9,7 @@ export const kalimbaVoice = (() => {
     if (Math.random() < 0.1) return beat() * 0.25;
 
     const scale    = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes    = scaleNotes(state.rootMidi + 48, scale, 2);
+    const notes    = scaleNotes(state.rootMidi + 36, scale, 2);
     const numNotes = Math.random() < 0.4 ? 2 : 1; // two thumbs occasionally
 
     for (let n = 0; n < numNotes; n++) {

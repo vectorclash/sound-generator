@@ -22,6 +22,11 @@ const GENRES = [
   { name:'ELEC',    scaleIdx:3, tempo:128, density:0.82, brightness:0.72, spaciousness:0.28 },
   { name:'ORCH',    scaleIdx:0, tempo:82,  density:0.60, brightness:0.38, spaciousness:0.78 },
   { name:'ZEN',     scaleIdx:4, tempo:56,  density:0.18, brightness:0.40, spaciousness:0.94 },
+  { name:'BLUES',   scaleIdx:3, tempo:88,  density:0.55, brightness:0.30, spaciousness:0.45 },
+  { name:'FOLK',    scaleIdx:6, tempo:96,  density:0.48, brightness:0.55, spaciousness:0.58 },
+  { name:'DREAM',   scaleIdx:5, tempo:72,  density:0.32, brightness:0.72, spaciousness:0.82 },
+  { name:'FUNK',    scaleIdx:3, tempo:110, density:0.82, brightness:0.68, spaciousness:0.20 },
+  { name:'EPIC',    scaleIdx:0, tempo:84,  density:0.62, brightness:0.42, spaciousness:0.74 },
 ];
 
 const BASS_SUBTYPES  = ['sub','plucked','walking','synth','rumble'];
@@ -337,6 +342,7 @@ modeTabs.forEach(tab => {
     modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
     infiniteUi.style.display = mode === 'infinite' ? '' : 'none';
     manualUi.classList.toggle('active', mode === 'manual');
+    if (mode === 'manual' && !Object.values(manualEnabled).some(v => v)) randomize();
   });
 });
 
@@ -669,6 +675,14 @@ clearInstrumentsBtn.addEventListener('click', () => {
     if (cbElements[k]) cbElements[k].checked = false;
   });
   updatePlayEnabled();
+});
+
+// ─── Collapsible sections ─────────────────────────────────────────────────────
+document.querySelectorAll('.section-header').forEach(header => {
+  header.addEventListener('click', e => {
+    if (e.target.closest('.clear-btn')) return;
+    header.closest('.collapsible-section').classList.toggle('collapsed');
+  });
 });
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

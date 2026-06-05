@@ -14,7 +14,8 @@ export const malletVoice = (() => {
     const gain = rand(0.09, 0.16);
 
     // Fundamental + octave with faster decay (marimba body)
-    for (const [ratio, gMul, decayMul] of [[1, 1, 1], [2, 0.5, 0.4]]) {
+    // Fundamental + octave + 4th harmonic (marimba resonators emphasise this partial)
+    for (const [ratio, gMul, decayMul] of [[1, 1, 1], [2, 0.5, 0.4], [4, 0.18, 0.12]]) {
       const osc = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
       osc.type = 'sine'; osc.frequency.value = hz * ratio;
       env.gain.setValueAtTime(0, t);

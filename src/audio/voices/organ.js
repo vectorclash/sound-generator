@@ -17,15 +17,29 @@ export const organVoice = (() => {
 
     for (const midi of chord) {
       const hz = midiToHz(midi);
+
+      // Per-note ADSR envelope bus
+      const adsr = ctx.createGain();
+      adsr.gain.setValueAtTime(0, t);
+      adsr.gain.linearRampToValueAtTime(1, t + 0.012);
+      adsr.gain.setValueAtTime(1, t + dur - 0.05);
+      adsr.gain.linearRampToValueAtTime(0, t + dur);
+
+      // Leslie rotary speaker: AM tremolo at ~7 Hz on the output bus
+      const bus    = ctx.createGain(); bus.gain.value = 1;
+      const leslie = ctx.createOscillator(), lDepth = ctx.createGain();
+      leslie.type = 'sine'; leslie.frequency.value = rand(6.8, 7.5);
+      lDepth.gain.value = 0.07;
+      leslie.connect(lDepth); lDepth.connect(bus.gain);
+      leslie.start(t); leslie.stop(t + dur + 0.05);
+
+      adsr.connect(bus); bus.connect(masterGain);
+
       for (const [ratio, vol] of DRAWBARS) {
-        const osc = ctx.createOscillator(), env = ctx.createGain();
+        const osc = ctx.createOscillator(), dGain = ctx.createGain();
         osc.type = 'sine'; osc.frequency.value = hz * ratio;
-        const g = rand(0.03, 0.05) * vol;
-        env.gain.setValueAtTime(0, t);
-        env.gain.linearRampToValueAtTime(g, t + 0.01); // fast click-free attack
-        env.gain.setValueAtTime(g, t + dur - 0.05);
-        env.gain.linearRampToValueAtTime(0, t + dur);
-        osc.connect(env); env.connect(masterGain);
+        dGain.gain.value = rand(0.03, 0.05) * vol;
+        osc.connect(dGain); dGain.connect(adsr);
         osc.start(t); osc.stop(t + dur + 0.05);
       }
     }

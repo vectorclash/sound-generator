@@ -18,8 +18,8 @@ export const choirVoice = (() => {
       for (const detune of [-12, 0, 12]) {
         const osc  = ctx.createOscillator(), filt = ctx.createBiquadFilter();
         const env  = ctx.createGain(),       wet  = ctx.createGain();
-        osc.type = 'sine'; osc.frequency.value = midiToHz(midi); osc.detune.value = detune + rand(-3, 3);
-        filt.type = 'bandpass'; filt.Q.value = 1.5;
+        osc.type = 'sawtooth'; osc.frequency.value = midiToHz(midi); osc.detune.value = detune + rand(-3, 3);
+        filt.type = 'bandpass'; filt.Q.value = 2.2;
         // Slow filter sweep for vowel movement
         filt.frequency.setValueAtTime(lerp(600, 1800, state.brightness), t);
         filt.frequency.linearRampToValueAtTime(lerp(1200, 3000, state.brightness), t + dur * 0.6);
