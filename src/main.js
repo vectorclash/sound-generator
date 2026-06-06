@@ -101,6 +101,8 @@ const exportProgressBar    = document.getElementById('export-progress-bar');
 const clearInstrumentsBtn  = document.getElementById('clear-instruments-btn');
 const manualShareBtn       = document.getElementById('manual-share-btn');
 const modeTabs             = document.querySelectorAll('.mode-tab');
+const panelToggleBtn       = document.getElementById('panel-toggle');
+let panelVisible = true;
 
 // ─── Enable state (all off by default) ───────────────────────────────────────
 const manualEnabled = {};
@@ -383,9 +385,26 @@ modeTabs.forEach(tab => {
     currentMode = mode;
     modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
     infiniteUi.style.display = mode === 'infinite' ? '' : 'none';
-    manualUi.classList.toggle('active', mode === 'manual');
-    if (mode === 'manual' && !Object.values(manualEnabled).some(v => v)) randomize();
+    if (mode === 'manual') {
+      panelVisible = true;
+      manualUi.classList.add('active');
+      panelToggleBtn.style.display = 'block';
+      panelToggleBtn.textContent = 'HIDE';
+      if (!Object.values(manualEnabled).some(v => v)) randomize();
+    } else {
+      panelToggleBtn.style.display = 'none';
+    }
   });
+});
+
+panelToggleBtn.addEventListener('click', () => {
+  panelVisible = !panelVisible;
+  manualUi.classList.toggle('active', panelVisible);
+  panelToggleBtn.style.opacity = '0';
+  setTimeout(() => {
+    panelToggleBtn.textContent = panelVisible ? 'HIDE' : 'SHOW';
+    panelToggleBtn.style.opacity = '';
+  }, 150);
 });
 
 // ─── Infinite mode ────────────────────────────────────────────────────────────

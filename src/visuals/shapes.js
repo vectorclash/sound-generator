@@ -1,14 +1,30 @@
 import * as THREE from 'three';
 import { scene } from './scene.js';
 
-// ─── Wireframe icosahedron ────────────────────────────────────────────────────
-const icoGeo     = new THREE.IcosahedronGeometry(1.5, 5);
-export const icoOrigPos = icoGeo.attributes.position.array.slice();
-const icoMat     = new THREE.MeshBasicMaterial({
-  color: 0x334466, wireframe: true, transparent: true, opacity: 0.75,
+// ─── Layered wireframe icosahedra ─────────────────────────────────────────────
+const ICO_LAYER_CONFIGS = [
+  { radius: 0.60, opacity: 0.10, ry:  0.0045, rx:  0.0015, hueOff: -100 },
+  { radius: 0.80, opacity: 0.12, ry: -0.0035, rx:  0.0010, hueOff:  -75 },
+  { radius: 1.00, opacity: 0.14, ry:  0.0030, rx:  0.0010, hueOff:  -50 },
+  { radius: 1.25, opacity: 0.11, ry: -0.0022, rx: -0.0008, hueOff:  -25 },
+  { radius: 1.50, opacity: 0.07, ry:  0.0016, rx: -0.0005, hueOff:    0 },
+];
+
+const icoLayers = ICO_LAYER_CONFIGS.map((cfg, i) => {
+  const geo = new THREE.IcosahedronGeometry(cfg.radius, 5);
+  const origPos = geo.attributes.position.array.slice();
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x334466, wireframe: true, transparent: true,
+    opacity: cfg.opacity, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.set(i * 0.38, i * 0.65, i * 0.22);
+  scene.add(mesh);
+  return { mesh, mat, origPos, ...cfg };
 });
-export const icoMesh = new THREE.Mesh(icoGeo, icoMat);
-scene.add(icoMesh);
+
+export const icoMesh    = icoLayers[2].mesh;
+export const icoOrigPos = icoLayers[2].origPos;
 
 // ─── Inner glow sphere ────────────────────────────────────────────────────────
 const glowGeo = new THREE.SphereGeometry(1.0, 32, 32);
@@ -51,27 +67,30 @@ for (let i = 0; i < BAR_COUNT; i++) {
 const _col = new THREE.Color();
 
 export function updateShapes(freqData, energy, bass, hue) {
-  // Icosahedron vertex deformation
-  const pos = icoMesh.geometry.attributes.position.array;
-  for (let i = 0; i < pos.length; i += 3) {
-    const ox = icoOrigPos[i], oy = icoOrigPos[i + 1], oz = icoOrigPos[i + 2];
-    const len = Math.sqrt(ox * ox + oy * oy + oz * oz);
-    const nx = ox / len, ny = oy / len, nz = oz / len;
-    const t   = Math.abs(Math.atan2(nz, nx) / Math.PI) * 0.5 + Math.abs(ny) * 0.5;
-    const bin = Math.floor(t * freqData.length * 0.75);
-    const disp = 1.5 + (freqData[bin] / 255) * 1.1 + bass * 0.5;
-    pos[i] = nx * disp; pos[i + 1] = ny * disp; pos[i + 2] = nz * disp;
+  // Layered icosahedron vertex deformation + rotation
+  for (const layer of icoLayers) {
+    const pos  = layer.mesh.geometry.attributes.position.array;
+    const orig = layer.origPos;
+    for (let i = 0; i < pos.length; i += 3) {
+      const ox = orig[i], oy = orig[i + 1], oz = orig[i + 2];
+      const len = Math.sqrt(ox * ox + oy * oy + oz * oz);
+      const nx = ox / len, ny = oy / len, nz = oz / len;
+      const t   = Math.abs(Math.atan2(nz, nx) / Math.PI) * 0.5 + Math.abs(ny) * 0.5;
+      const bin = Math.floor(t * freqData.length * 0.75);
+      const disp = layer.radius + (freqData[bin] / 255) * 0.7 + bass * 0.3;
+      pos[i] = nx * disp; pos[i + 1] = ny * disp; pos[i + 2] = nz * disp;
+    }
+    layer.mesh.geometry.attributes.position.needsUpdate = true;
+    _col.setHSL(((hue + layer.hueOff + 360) % 360) / 360, 0.65, 0.55);
+    layer.mat.color.copy(_col);
+    layer.mesh.rotation.y += layer.ry + energy * 0.006;
+    layer.mesh.rotation.x += layer.rx + energy * 0.002;
   }
-  icoMesh.geometry.attributes.position.needsUpdate = true;
-  _col.setHSL(hue / 360, 0.65, 0.55);
-  icoMat.color.copy(_col);
-  icoMesh.rotation.y += 0.003 + energy * 0.006;
-  icoMesh.rotation.x += 0.001 + energy * 0.002;
 
   // Glow sphere
   _col.setHSL(hue / 360, 0.85, 0.25);
   glowMat.color.copy(_col);
-  glowMat.opacity = 0.15 + bass * 0.65;
+  glowMat.opacity = 0.04 + bass * 0.18;
   glowMesh.scale.setScalar(1.0 + bass * 0.6);
 
   // Frequency bars

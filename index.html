@@ -50,6 +50,11 @@
       pointer-events: all;
       display: flex;
       border: 1px solid #4a5a6a;
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
     }
     .mode-tab {
       background: transparent;
@@ -71,9 +76,17 @@
     .mode-tab.active { color: #d0dde8; background: rgba(100,140,200,0.12); }
 
     /* ─── Infinite mode UI ────────────────────────────────────────────────── */
+    #infinite-ui {
+      position: fixed;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      white-space: nowrap;
+    }
     #start-btn {
       pointer-events: all;
-      background: transparent;
+      background: rgba(8, 8, 14, 0.5);
       border: 1px solid #555;
       color: #999;
       font-family: inherit;
@@ -96,7 +109,7 @@
       color: #778899;
       line-height: 1.8;
       transition: color 1s;
-      text-shadow: 0 0 18px rgba(100,140,200,0.6);
+      text-shadow: 0 1px 4px #000, 0 0 18px rgba(100,140,200,0.6);
     }
     #info.active { color: #ccd8e8; }
     #state-line {
@@ -104,7 +117,7 @@
       color: #556677;
       letter-spacing: 2px;
       transition: color 2s;
-      text-shadow: 0 0 14px rgba(100,140,200,0.5);
+      text-shadow: 0 1px 4px #000, 0 0 14px rgba(100,140,200,0.5);
       white-space: pre-line;
       line-height: 1.8;
     }
@@ -178,8 +191,7 @@
 
     /* ─── Manual panel ────────────────────────────────────────────────────── */
     #manual-ui {
-      display: none;
-      pointer-events: all;
+      pointer-events: none;
       width: min(500px, 92vw);
       max-height: 72vh;
       overflow-y: auto;
@@ -190,8 +202,19 @@
       scrollbar-width: thin;
       scrollbar-color: #3a4a5a transparent;
       scrollbar-gutter: stable both-edges;
+      visibility: hidden;
+      opacity: 0;
+      transform: translateY(-16px) scale(0.97);
+      transform-origin: top center;
+      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s;
     }
-    #manual-ui.active { display: block; }
+    #manual-ui.active {
+      visibility: visible;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: all;
+      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s;
+    }
     #manual-ui::-webkit-scrollbar { width: 3px; }
     #manual-ui::-webkit-scrollbar-thumb { background: #3a4a5a; }
 
@@ -578,6 +601,29 @@
         letter-spacing: 1.5px;
       }
     }
+
+    #panel-toggle {
+      display: none;
+      position: fixed;
+      top: 62px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: transparent;
+      border: 1px solid #2a3a4a;
+      color: #556677;
+      font-family: inherit;
+      font-size: 9px;
+      padding: 4px 14px;
+      cursor: pointer;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+      z-index: 2;
+      pointer-events: all;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #panel-toggle:hover { border-color: #6a8aaa; color: #aabece; }
+    #panel-toggle:active { opacity: 0.4; }
   </style>
 </head>
 <body>
@@ -589,6 +635,7 @@
       <button class="mode-tab active" data-mode="infinite">INFINITE</button>
       <button class="mode-tab" data-mode="manual">MANUAL</button>
     </div>
+    <button id="panel-toggle">HIDE</button>
 
     <!-- Infinite mode -->
     <div id="infinite-ui">
