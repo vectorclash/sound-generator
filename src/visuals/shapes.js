@@ -3,11 +3,11 @@ import { scene } from './scene.js';
 
 // ─── Layered wireframe icosahedra ─────────────────────────────────────────────
 const ICO_LAYER_CONFIGS = [
-  { radius: 0.60, opacity: 0.10, ry:  0.0045, rx:  0.0015, hueOff: -100 },
-  { radius: 0.80, opacity: 0.12, ry: -0.0035, rx:  0.0010, hueOff:  -75 },
-  { radius: 1.00, opacity: 0.14, ry:  0.0030, rx:  0.0010, hueOff:  -50 },
-  { radius: 1.25, opacity: 0.11, ry: -0.0022, rx: -0.0008, hueOff:  -25 },
-  { radius: 1.50, opacity: 0.07, ry:  0.0016, rx: -0.0005, hueOff:    0 },
+  { radius: 0.60, opacity: 0.15, ry:  0.0045, rx:  0.0015, hueOff: -100 },
+  { radius: 0.80, opacity: 0.18, ry: -0.0035, rx:  0.0010, hueOff:  -75 },
+  { radius: 1.00, opacity: 0.21, ry:  0.0030, rx:  0.0010, hueOff:  -50 },
+  { radius: 1.25, opacity: 0.16, ry: -0.0022, rx: -0.0008, hueOff:  -25 },
+  { radius: 1.50, opacity: 0.10, ry:  0.0016, rx: -0.0005, hueOff:    0 },
 ];
 
 const icoLayers = ICO_LAYER_CONFIGS.map((cfg, i) => {
