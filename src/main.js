@@ -395,7 +395,8 @@ function updateInfiniteDisplay() {
     `bass(${bassVoice.style})`,
     ...activeVoices.map(v => v.style ? `${v.name}(${v.style})` : v.name),
   ].join(' · ');
-  stateEl.textContent = `${rootName()} ${scaleName()}  ·  ${Math.round(state.tempo)} bpm  ·  era ${state.era}  [${prog}%]\n${voiceNames}`;
+  const oct = state.octaveShift;
+  stateEl.textContent = `${rootName()} ${scaleName()}  ·  ${Math.round(state.tempo)} bpm  ·  oct ${oct >= 0 ? '+' : ''}${oct}  ·  era ${state.era}  [${prog}%]\n${voiceNames}`;
 }
 
 function stopInfinite() {
@@ -420,9 +421,10 @@ startBtn.addEventListener('click', async () => {
   infoEl.classList.add('active');
   stateEl.classList.add('active');
 
-  state.scaleIdx   = 0;
-  state.rootMidi   = 36;
-  state.tempo      = Math.floor(Math.random() * 79) + 52; // 52–130
+  state.scaleIdx    = 0;
+  state.rootMidi    = 36;
+  state.tempo       = Math.floor(Math.random() * 79) + 52; // 52–130
+  state.octaveShift = pick([-3, -2, -1, 0, 0, 1]);
   state.harmonyLock = 0.78;
   state.chordBeats  = 4;
 

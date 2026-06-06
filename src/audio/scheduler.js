@@ -74,6 +74,7 @@ export function advanceEra() {
   state.brightness   = rand(0.1, 0.9);
   state.spaciousness = rand(0.2, 0.85);
   state.density      = rand(0.2, 0.9);
+  state.octaveShift  = pick([-3, -2, -1, 0, 0, 1]);
   state.chordBeats   = pick([4, 4, 8]);
   harmony.reroll();
   pickVoices();
