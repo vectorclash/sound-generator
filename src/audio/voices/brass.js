@@ -1,5 +1,6 @@
 import { audio } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 export const brassVoice = (() => {
   let nextTime = 0;
@@ -9,7 +10,7 @@ export const brassVoice = (() => {
     if (Math.random() < 0.3) return beat() * pick([1, 2]);
 
     const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const hz    = midiToHz(pick(scaleNotes(state.rootMidi + 24, scale, 2)));
+    const hz    = midiToHz(harmony.pickChordTone(scaleNotes(state.rootBase + 24, scale, 2)));
     const dur   = beat() * pick([1, 1, 1.5, 2]);
     const gain  = rand(0.10, 0.16);
 

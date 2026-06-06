@@ -1,5 +1,6 @@
 import { audio } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 export const kalimbaVoice = (() => {
   let nextTime = 0;
@@ -9,11 +10,11 @@ export const kalimbaVoice = (() => {
     if (Math.random() < 0.1) return beat() * 0.25;
 
     const scale    = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes    = scaleNotes(state.rootMidi + 36, scale, 2);
+    const notes    = scaleNotes(state.rootBase + 36, scale, 2);
     const numNotes = Math.random() < 0.4 ? 2 : 1; // two thumbs occasionally
 
     for (let n = 0; n < numNotes; n++) {
-      const midi      = pick(notes);
+      const midi      = harmony.pickChordTone(notes);
       const hz        = midiToHz(midi);
       const offset    = n * 0.04; // thumb stagger
       const gain      = rand(0.05, 0.09);

@@ -1,5 +1,6 @@
 import { audio } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
+import { state, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 export const harpVoice = (() => {
   let nextTime = 0;
@@ -9,16 +10,10 @@ export const harpVoice = (() => {
     const wait = beat() * pick([2, 3, 4]);
     if (Math.random() < 0.25) return wait;
 
-    const scale     = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const root      = state.rootMidi + 36;
-    const degree    = pick([0, 2, 4]);
     const noteCount = 5 + Math.floor(Math.random() * 3); // 5–7 notes
-
-    const notes = Array.from({ length: noteCount }, (_, i) => {
-      const idx = (degree + i) % scale.length;
-      const oct = Math.floor((degree + i) / scale.length);
-      return root + oct * 12 + scale[idx];
-    });
+    // Arpeggiate the current chord across octaves (stacked thirds), so the
+    // sweep lands only on chord tones and stays locked to the progression.
+    const notes = harmony.chordMidis(state.rootBase + 24, noteCount);
     if (Math.random() < 0.4) notes.reverse();
 
     const stepDur = beat() * pick([0.18, 0.22, 0.28]);

@@ -1,5 +1,6 @@
 import { audio } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 export const fluteVoice = (() => {
   let nextTime = 0;
@@ -8,8 +9,8 @@ export const fluteVoice = (() => {
     const { ctx, masterGain, reverbNode } = audio;
     if (Math.random() < 0.2) return beat() * pick([1, 1, 2]);
 
-    const notes = scaleNotes(state.rootMidi + 48, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
-    const hz   = midiToHz(pick(notes));
+    const notes = scaleNotes(state.rootBase + 36, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
+    const hz   = midiToHz(harmony.pickChordTone(notes));
     const dur  = beat() * pick([1, 1.5, 2, 3]);
     const gain = rand(0.06, 0.11);
 

@@ -112,7 +112,7 @@
 
     /* ─── Collapsible sections ──────────────────────────────────────────────── */
     .collapsible-section {
-      border-top: 1px solid #1e2a3a;
+      border-top: 1px solid #2a3a4a;
       padding-top: 10px;
     }
     .collapsible-section:first-child { border-top: none; padding-top: 0; }
@@ -121,11 +121,17 @@
       align-items: center;
       justify-content: space-between;
       cursor: pointer;
-      padding-bottom: 10px;
+      padding: 4px 6px;
+      margin: 0 -6px 6px;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
+      transition: background 0.15s;
+      border-radius: 2px;
     }
+    .section-header:hover { background: rgba(100,150,200,0.07); }
+    .section-header:hover .section-label { color: #aabece; }
+    .section-header:hover .section-chevron { color: #7a9fc0; border-color: #4a6a8a; }
     .section-header .section-label { margin-bottom: 0; }
     .section-header-right {
       display: flex;
@@ -133,12 +139,16 @@
       gap: 10px;
     }
     .section-chevron {
-      font-size: 8px;
+      font-size: 10px;
       color: #4a6a80;
-      transition: transform 0.22s;
+      border: 1px solid #2a3a4a;
+      padding: 1px 7px;
+      letter-spacing: 1px;
+      transition: color 0.15s, border-color 0.15s;
       flex-shrink: 0;
     }
-    .collapsible-section.collapsed .section-chevron { transform: rotate(-90deg); }
+    .section-chevron::before { content: '–'; }
+    .collapsible-section.collapsed .section-chevron::before { content: '+'; }
     .section-body {
       overflow: hidden;
       max-height: 1000px;
@@ -518,8 +528,8 @@
       .ctrl-unit   { font-size: 11px; }
 
       /* section headers: bigger tap target */
-      .section-header { padding-top: 4px; padding-bottom: 12px; }
-      .section-chevron { font-size: 10px; }
+      .section-header { padding: 8px 6px; margin-bottom: 8px; }
+      .section-chevron { font-size: 12px; padding: 2px 9px; }
 
       /* genre buttons: bigger tap area + font */
       .genre-btn {
@@ -590,11 +600,11 @@
     <!-- Manual mode -->
     <div id="manual-ui">
 
-      <!-- Genre presets (collapsed by default) -->
-      <div class="collapsible-section collapsed" id="section-genre">
+      <!-- Genre presets -->
+      <div class="collapsible-section" id="section-genre">
         <div class="section-header">
           <span class="section-label">GENRE</span>
-          <span class="section-chevron">&#9662;</span>
+          <span class="section-chevron"></span>
         </div>
         <div class="section-body">
           <div class="ctrl-row" style="margin-bottom:12px">
@@ -604,10 +614,10 @@
       </div>
 
       <!-- Feel: key, scale, BPM, sliders -->
-      <div class="collapsible-section" id="section-feel">
+      <div class="collapsible-section collapsed" id="section-feel">
         <div class="section-header">
           <span class="section-label">FEEL</span>
-          <span class="section-chevron">&#9662;</span>
+          <span class="section-chevron"></span>
         </div>
         <div class="section-body">
           <div class="ctrl-row">
@@ -622,6 +632,11 @@
             <span id="manual-bpm-value" class="ctrl-value">90</span>
           </div>
           <div class="ctrl-row">
+            <span class="ctrl-label">OCTAVE</span>
+            <input type="range" class="feel-slider" id="manual-octave-slider" min="-3" max="1" step="1" value="0">
+            <span class="ctrl-value" id="manual-octave-val">0</span>
+          </div>
+          <div class="ctrl-row">
             <span class="ctrl-label">DENSITY</span>
             <input type="range" class="feel-slider" id="density-slider" min="0" max="1" step="0.01" value="0.60">
             <span class="ctrl-value" id="density-val">0.60</span>
@@ -631,21 +646,31 @@
             <input type="range" class="feel-slider" id="bright-slider" min="0" max="1" step="0.01" value="0.50">
             <span class="ctrl-value" id="bright-val">0.50</span>
           </div>
-          <div class="ctrl-row" style="margin-bottom:4px">
+          <div class="ctrl-row">
             <span class="ctrl-label">SPACE</span>
             <input type="range" class="feel-slider" id="space-slider" min="0" max="1" step="0.01" value="0.50">
             <span class="ctrl-value" id="space-val">0.50</span>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">HARMONY</span>
+            <input type="range" class="feel-slider" id="harmony-slider" min="0" max="1" step="0.01" value="0.78">
+            <span class="ctrl-value" id="harmony-val">0.78</span>
+          </div>
+          <div class="ctrl-row" style="margin-bottom:4px">
+            <span class="ctrl-label">CHORD</span>
+            <input type="range" class="feel-slider" id="chord-slider" min="2" max="8" step="1" value="4">
+            <span class="ctrl-value" id="chord-val">4</span>
           </div>
         </div>
       </div>
 
       <!-- Instruments -->
-      <div class="collapsible-section" id="section-instruments">
+      <div class="collapsible-section collapsed" id="section-instruments">
         <div class="section-header">
           <span class="section-label">INSTRUMENTS</span>
           <div class="section-header-right">
             <button class="clear-btn" id="clear-instruments-btn">CLEAR</button>
-            <span class="section-chevron">&#9662;</span>
+            <span class="section-chevron"></span>
           </div>
         </div>
         <div class="section-body">

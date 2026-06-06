@@ -10,23 +10,26 @@ import {
   activeVoices, eraTimer, ERA_DURATION,
 } from './audio/scheduler.js';
 import { startAnimation } from './visuals/animate.js';
+import { harmony } from './audio/harmony.js';
 
 // ─── Definitions ──────────────────────────────────────────────────────────────
 const ROOT_NAMES   = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const SCALE_LABELS = ['AEOLIAN','DORIAN','PHRYGIAN','PENT MINOR','PENT MAJOR','LYDIAN','MIXOLYDIAN'];
 
+// harmony = chord-tone lock (0 loose/roaming … 1 strict/consonant)
+// chord   = beats per chord (low = fast harmonic motion, high = slow/static)
 const GENRES = [
-  { name:'AMBIENT', scaleIdx:5, tempo:65,  density:0.25, brightness:0.25, spaciousness:0.88 },
-  { name:'DARK',    scaleIdx:2, tempo:72,  density:0.45, brightness:0.12, spaciousness:0.65 },
-  { name:'JAZZ',    scaleIdx:1, tempo:112, density:0.75, brightness:0.50, spaciousness:0.40 },
-  { name:'ELEC',    scaleIdx:3, tempo:128, density:0.82, brightness:0.72, spaciousness:0.28 },
-  { name:'ORCH',    scaleIdx:0, tempo:82,  density:0.60, brightness:0.38, spaciousness:0.78 },
-  { name:'ZEN',     scaleIdx:4, tempo:56,  density:0.18, brightness:0.40, spaciousness:0.94 },
-  { name:'BLUES',   scaleIdx:3, tempo:88,  density:0.55, brightness:0.30, spaciousness:0.45 },
-  { name:'FOLK',    scaleIdx:6, tempo:96,  density:0.48, brightness:0.55, spaciousness:0.58 },
-  { name:'DREAM',   scaleIdx:5, tempo:72,  density:0.32, brightness:0.72, spaciousness:0.82 },
-  { name:'FUNK',    scaleIdx:3, tempo:110, density:0.82, brightness:0.68, spaciousness:0.20 },
-  { name:'EPIC',    scaleIdx:0, tempo:84,  density:0.62, brightness:0.42, spaciousness:0.74 },
+  { name:'AMBIENT', scaleIdx:5, tempo:65,  density:0.25, brightness:0.25, spaciousness:0.88, harmony:0.72, chord:8 },
+  { name:'DARK',    scaleIdx:2, tempo:72,  density:0.45, brightness:0.12, spaciousness:0.65, harmony:0.75, chord:8 },
+  { name:'JAZZ',    scaleIdx:1, tempo:112, density:0.75, brightness:0.50, spaciousness:0.40, harmony:0.50, chord:4 },
+  { name:'ELEC',    scaleIdx:3, tempo:128, density:0.82, brightness:0.72, spaciousness:0.28, harmony:0.85, chord:4 },
+  { name:'ORCH',    scaleIdx:0, tempo:82,  density:0.60, brightness:0.38, spaciousness:0.78, harmony:0.85, chord:4 },
+  { name:'ZEN',     scaleIdx:4, tempo:56,  density:0.18, brightness:0.40, spaciousness:0.94, harmony:0.80, chord:8 },
+  { name:'BLUES',   scaleIdx:3, tempo:88,  density:0.55, brightness:0.30, spaciousness:0.45, harmony:0.45, chord:4 },
+  { name:'FOLK',    scaleIdx:6, tempo:96,  density:0.48, brightness:0.55, spaciousness:0.58, harmony:0.85, chord:4 },
+  { name:'DREAM',   scaleIdx:5, tempo:72,  density:0.32, brightness:0.72, spaciousness:0.82, harmony:0.72, chord:8 },
+  { name:'FUNK',    scaleIdx:3, tempo:110, density:0.82, brightness:0.68, spaciousness:0.20, harmony:0.55, chord:4 },
+  { name:'EPIC',    scaleIdx:0, tempo:84,  density:0.62, brightness:0.42, spaciousness:0.74, harmony:0.90, chord:4 },
 ];
 
 const BASS_SUBTYPES  = ['sub','plucked','walking','synth','rumble'];
@@ -74,12 +77,18 @@ const rootSelect      = document.getElementById('manual-root');
 const scaleSelect     = document.getElementById('manual-scale');
 const bpmSlider       = document.getElementById('manual-bpm-slider');
 const bpmValue        = document.getElementById('manual-bpm-value');
+const octaveSlider    = document.getElementById('manual-octave-slider');
+const octaveVal       = document.getElementById('manual-octave-val');
 const densitySlider   = document.getElementById('density-slider');
 const densityVal      = document.getElementById('density-val');
 const brightSlider    = document.getElementById('bright-slider');
 const brightVal       = document.getElementById('bright-val');
 const spaceSlider     = document.getElementById('space-slider');
 const spaceVal        = document.getElementById('space-val');
+const harmonySlider   = document.getElementById('harmony-slider');
+const harmonyVal      = document.getElementById('harmony-val');
+const chordSlider     = document.getElementById('chord-slider');
+const chordVal        = document.getElementById('chord-val');
 const lengthInput     = document.getElementById('manual-length');
 const lengthValue     = document.getElementById('manual-length-value');
 const voiceGroups     = document.getElementById('voice-groups');
@@ -139,12 +148,18 @@ GENRES.forEach(g => {
     brightVal.textContent  = g.brightness.toFixed(2);
     spaceSlider.value      = g.spaciousness;
     spaceVal.textContent   = g.spaciousness.toFixed(2);
+    harmonySlider.value    = g.harmony;
+    harmonyVal.textContent = g.harmony.toFixed(2);
+    chordSlider.value      = g.chord;
+    chordVal.textContent   = g.chord;
     // Apply to live state immediately (takes effect even while playing)
     state.scaleIdx      = g.scaleIdx;
     state.tempo         = g.tempo;
     state.density       = g.density;
     state.brightness    = g.brightness;
     state.spaciousness  = g.spaciousness;
+    state.harmonyLock   = g.harmony;
+    state.chordBeats    = g.chord;
   });
   genreBtnsEl.appendChild(btn);
 });
@@ -156,27 +171,39 @@ function randomize() {
   const root         = Math.floor(Math.random() * 12);
   const scale        = Math.floor(Math.random() * SCALE_LABELS.length);
   const bpm          = Math.floor(Math.random() * 91) + 50; // 50–140
+  const octave       = Math.floor(Math.random() * 5) - 3; // -3 to +1
   const density      = Math.round((Math.random() * 0.8 + 0.1) * 100) / 100;
   const brightness   = Math.round((Math.random() * 0.8 + 0.1) * 100) / 100;
   const spaciousness = Math.round((Math.random() * 0.8 + 0.1) * 100) / 100;
+  const harmonyLock  = Math.round((Math.random() * 0.5 + 0.5) * 100) / 100; // 0.5–1.0, lean musical
+  const chordBeats   = [2, 3, 4, 4, 6, 8][Math.floor(Math.random() * 6)];
 
   rootSelect.value        = root;
   scaleSelect.value       = scale;
   bpmSlider.value         = bpm;
   bpmValue.textContent    = bpm;
+  octaveSlider.value      = octave;
+  octaveVal.textContent   = (octave >= 0 ? '+' : '') + octave;
   densitySlider.value     = density;
   densityVal.textContent  = density.toFixed(2);
   brightSlider.value      = brightness;
   brightVal.textContent   = brightness.toFixed(2);
   spaceSlider.value       = spaciousness;
   spaceVal.textContent    = spaciousness.toFixed(2);
+  harmonySlider.value     = harmonyLock;
+  harmonyVal.textContent  = harmonyLock.toFixed(2);
+  chordSlider.value       = chordBeats;
+  chordVal.textContent    = chordBeats;
 
   state.rootMidi     = 36 + root;
   state.scaleIdx     = scale;
   state.tempo        = bpm;
+  state.octaveShift  = octave;
   state.density      = density;
   state.brightness   = brightness;
   state.spaciousness = spaciousness;
+  state.harmonyLock  = harmonyLock;
+  state.chordBeats   = chordBeats;
 
   // Clear all instruments first
   Object.keys(manualEnabled).forEach(k => {
@@ -307,6 +334,12 @@ bpmSlider.addEventListener('input', () => {
   bpmValue.textContent = bpmSlider.value;
   clearGenreHighlight();
 });
+octaveSlider.addEventListener('input', () => {
+  state.octaveShift = parseInt(octaveSlider.value, 10);
+  const v = state.octaveShift;
+  octaveVal.textContent = (v >= 0 ? '+' : '') + v;
+  clearGenreHighlight();
+});
 densitySlider.addEventListener('input', () => {
   state.density = parseFloat(densitySlider.value);
   densityVal.textContent = state.density.toFixed(2);
@@ -320,6 +353,16 @@ brightSlider.addEventListener('input', () => {
 spaceSlider.addEventListener('input', () => {
   state.spaciousness = parseFloat(spaceSlider.value);
   spaceVal.textContent = state.spaciousness.toFixed(2);
+  clearGenreHighlight();
+});
+harmonySlider.addEventListener('input', () => {
+  state.harmonyLock = parseFloat(harmonySlider.value);
+  harmonyVal.textContent = state.harmonyLock.toFixed(2);
+  clearGenreHighlight();
+});
+chordSlider.addEventListener('input', () => {
+  state.chordBeats = parseInt(chordSlider.value, 10);
+  chordVal.textContent = chordSlider.value;
   clearGenreHighlight();
 });
 lengthInput.addEventListener('input', () => {
@@ -377,10 +420,13 @@ startBtn.addEventListener('click', async () => {
   infoEl.classList.add('active');
   stateEl.classList.add('active');
 
-  state.scaleIdx = 0;
-  state.rootMidi = 36;
-  state.tempo    = 78;
+  state.scaleIdx   = 0;
+  state.rootMidi   = 36;
+  state.tempo      = Math.floor(Math.random() * 79) + 52; // 52–130
+  state.harmonyLock = 0.78;
+  state.chordBeats  = 4;
 
+  harmony.reroll();
   pickVoices();
   bassVoice.reroll();
 
@@ -388,6 +434,7 @@ startBtn.addEventListener('click', async () => {
   // doesn't produce a stale-dt era jump or a catch-up note burst.
   resetTickTimer();
   const _now = audio.ctx.currentTime;
+  harmony.reset(_now);
   bassVoice.reset(_now); drumsVoice.reset(_now);
   SIMPLE_VOICES.forEach(({ voice }) => voice.reset(_now));
 
@@ -416,12 +463,15 @@ async function manualInit() {
   unmuteAudio();
 
   state.tempo        = parseInt(bpmSlider.value, 10);
+  state.octaveShift  = parseInt(octaveSlider.value, 10);
   state.rootMidi     = 36 + parseInt(rootSelect.value, 10);
   state.scaleIdx     = parseInt(scaleSelect.value, 10);
   state.era          = 0;
   state.density      = parseFloat(densitySlider.value);
   state.brightness   = parseFloat(brightSlider.value);
   state.spaciousness = parseFloat(spaceSlider.value);
+  state.harmonyLock  = parseFloat(harmonySlider.value);
+  state.chordBeats   = parseInt(chordSlider.value, 10);
 
   const bassSubs = enabledBassSubtypes();
   if (bassSubs.length > 0) bassVoice.setStyle(pick(bassSubs));
@@ -431,6 +481,8 @@ async function manualInit() {
   // Reset every voice scheduler to now so stale nextTime values don't cause
   // a catch-up burst of past-timestamped notes on the first tick.
   const now = audio.ctx.currentTime;
+  harmony.reroll();
+  harmony.reset(now);
   bassVoice.reset(now);
   drumsVoice.reset(now);
   SIMPLE_VOICES.forEach(({ voice }) => voice.reset(now));
@@ -697,11 +749,14 @@ document.querySelectorAll('.section-header').forEach(header => {
 });
 
 // ─── Share / restore config via URL hash ─────────────────────────────────────
-// Binary pack: 11 bytes → 15 base64url chars
+// Binary pack: 13 bytes → 18 base64url chars
 // [rootOffset(1), scale(1), tempo(1), density×100(1), brightness×100(1),
-//  spaciousness×100(1), instBitmask(5 bytes, 34 bits)]
+//  spaciousness×100(1), instBitmask(5 bytes, 34 bits),
+//  harmonyLock×100(1), chordBeats(1)]
+// The last two bytes were added later; older 11-byte links still decode (the
+// new fields come back undefined and fall back to current/default values).
 function encodeConfig() {
-  const b = new Uint8Array(11);
+  const b = new Uint8Array(13);
   b[0] = state.rootMidi - 36;
   b[1] = state.scaleIdx;
   b[2] = state.tempo;
@@ -711,6 +766,8 @@ function encodeConfig() {
   ALL_INST_KEYS.forEach((k, i) => {
     if (manualEnabled[k]) b[6 + Math.floor(i / 8)] |= (1 << (i % 8));
   });
+  b[11] = Math.round(state.harmonyLock * 100);
+  b[12] = state.chordBeats;
   return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
@@ -722,6 +779,8 @@ function decodeConfig(str) {
       r: b[0] + 36, s: b[1], t: b[2],
       d: b[3] / 100, b: b[4] / 100, p: b[5] / 100,
       m: ALL_INST_KEYS.filter((_, i) => b[6 + Math.floor(i / 8)] & (1 << (i % 8))),
+      hl: b[11] !== undefined ? b[11] / 100 : undefined,
+      cb: b[12] !== undefined ? b[12] : undefined,
     };
   } catch { return null; }
 }
@@ -734,6 +793,8 @@ function applyConfig(cfg) {
   state.density      = cfg.d ?? state.density;
   state.brightness   = cfg.b ?? state.brightness;
   state.spaciousness = cfg.p ?? state.spaciousness;
+  state.harmonyLock  = cfg.hl ?? state.harmonyLock;
+  state.chordBeats   = cfg.cb ?? state.chordBeats;
 
   rootSelect.value        = state.rootMidi - 36;
   scaleSelect.value       = state.scaleIdx;
@@ -745,6 +806,10 @@ function applyConfig(cfg) {
   brightVal.textContent   = state.brightness.toFixed(2);
   spaceSlider.value       = state.spaciousness;
   spaceVal.textContent    = state.spaciousness.toFixed(2);
+  harmonySlider.value     = state.harmonyLock;
+  harmonyVal.textContent  = state.harmonyLock.toFixed(2);
+  chordSlider.value       = state.chordBeats;
+  chordVal.textContent    = state.chordBeats;
 
   const enabled = new Set(cfg.m || []);
   Object.keys(manualEnabled).forEach(k => {

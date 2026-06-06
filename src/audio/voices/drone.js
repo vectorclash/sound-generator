@@ -7,7 +7,7 @@ export const droneVoice = (() => {
   function play(t) {
     const { ctx, masterGain, reverbNode } = audio;
     const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes = [state.rootMidi + 12, state.rootMidi + 12 + scale[4]]; // root + fifth
+    const notes = [state.rootBase + 12, state.rootBase + 12 + scale[4]]; // root + fifth
     const dur   = beat() * pick([8, 12, 16]);
     const gain  = rand(0.04, 0.08);
 

@@ -1,15 +1,13 @@
 import { audio } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
+import { state, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 export const arpeggioVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
     const { ctx, masterGain, reverbNode } = audio;
-    const scale  = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const root   = state.rootMidi + 36;
-    const degree = pick([0, 2, 4]);
-    const chord  = [0, 2, 4, 7].map(i => root + scale[(degree + i) % scale.length]);
+    const chord  = harmony.chordMidis(state.rootBase + 24, 4);
     const stepDur = beat() * pick([0.25, 0.25, 0.5]);
     const gain    = rand(0.07, 0.12);
     const pattern = Math.random() < 0.5 ? chord : [...chord, ...chord.slice(0, -1).reverse()];

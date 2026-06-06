@@ -17,12 +17,16 @@ export const SCALE_NAMES = Object.keys(SCALES);
 // All modules import this same object reference and see each other's mutations.
 export const state = {
   rootMidi:    36,
+  octaveShift: 0,
   scaleIdx:    0,
   tempo:       88,
   density:     0.5,
   brightness:  0.3,
   spaciousness: 0.5,
+  harmonyLock: 0.78, // 0 = melodies roam the whole scale, 1 = strict chord tones
+  chordBeats:  4,    // beats per chord — how often the progression advances
   era:         0,
+  get rootBase() { return this.rootMidi + this.octaveShift * 12; },
 };
 
 // ─── Scheduler constants ──────────────────────────────────────────────────────

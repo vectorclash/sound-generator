@@ -1,5 +1,6 @@
 import { audio } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
+import { state, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 // Hammond-style additive synthesis: 5 drawbar harmonics
 const DRAWBARS = [[1, 0.8], [2, 0.5], [3, 0.3], [4, 0.2], [5, 0.15]];
@@ -9,10 +10,7 @@ export const organVoice = (() => {
 
   function play(t) {
     const { ctx, masterGain } = audio;
-    const scale  = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const root   = state.rootMidi + 24;
-    const degree = pick([0, 2, 4]);
-    const chord  = [0, 2, 4].map(i => root + scale[(degree + i) % scale.length]);
+    const chord  = harmony.chordMidis(state.rootBase + 24, 3);
     const dur    = beat() * pick([2, 3, 4]);
 
     for (const midi of chord) {

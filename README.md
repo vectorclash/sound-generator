@@ -16,9 +16,9 @@ Click **PLAY** to start. The button toggles to **STOP**, allowing playback to be
 
 Full control over every parameter. The panel is divided into three collapsible sections — **GENRE**, **FEEL**, and **INSTRUMENTS** — to reduce visual clutter.
 
-**Genre presets** (AMBIENT, DARK, JAZZ, ELEC, ORCH, ZEN, BLUES, FOLK, DREAM, FUNK, EPIC) instantly configure a musically coherent combination of scale, tempo, density, brightness, and spaciousness. **RANDOM** picks a fresh random combination of all parameters and instruments. Entering Manual mode with no instruments selected automatically randomises.
+**Genre presets** (AMBIENT, DARK, JAZZ, ELEC, ORCH, ZEN, BLUES, FOLK, DREAM, FUNK, EPIC) instantly configure a musically coherent combination of scale, tempo, density, brightness, spaciousness, and the two harmony controls — e.g. JAZZ and BLUES loosen the chord-tone lock and move chords every 4 beats, while AMBIENT, ZEN, and DREAM keep tight, consonant voices over long 8-beat chords. **RANDOM** picks a fresh random combination of all parameters and instruments. Entering Manual mode with no instruments selected automatically randomises.
 
-**SHARE** encodes the full current configuration — key, scale, tempo, all three feel sliders, and every enabled instrument — as an 11-byte binary payload in the URL hash (`#c=…`, 15 base64url characters). Clicking the button copies the URL to the clipboard. Loading that URL restores the exact configuration.
+**SHARE** encodes the full current configuration — key, scale, tempo, all five feel sliders, and every enabled instrument — as a 13-byte binary payload in the URL hash (`#c=…`, 18 base64url characters). Clicking the button copies the URL to the clipboard. Loading that URL restores the exact configuration. (Older 11-byte links from before the harmony controls still load — the two new fields fall back to their defaults.)
 
 **Controls:**
 | Control | Range | Effect |
@@ -27,6 +27,8 @@ Full control over every parameter. The panel is divided into three collapsible s
 | Density | 0–1 | Note volume and presence |
 | Brightness | 0–1 | Filter cutoff on pad and clavinet |
 | Spaciousness | 0–1 | Reverb send on pad |
+| Harmony | 0–1 | How strongly melodic voices lock to chord tones — 0 lets them roam the whole scale (looser, more random), 1 keeps them strictly on the chord (tighter, more consonant). Triads and bass always follow the progression. |
+| Chord | 2–8 beats | How often the chord progression advances — low = fast harmonic motion, high = long, slow-changing chords |
 
 **Export** records a WAV file of exactly the requested duration. A 3-2-1 countdown mutes any previously playing audio so the recording starts clean. At the end of the recording window, a 5 ms sample-accurate micro-ramp on the audio clock prevents a waveform discontinuity at the cut point. The raw MediaRecorder capture is decoded and trimmed to exactly `duration × sampleRate` samples before writing the WAV header, so a 10-second export is precisely 10 seconds.
 
@@ -135,6 +137,24 @@ Seven scales defined as semitone intervals from the root:
 
 MIDI note numbers convert to Hz with `C2_hz × 2^((midi−24)/12)` where C2 = 65.406 Hz.
 
+### Harmony engine
+
+All pitched voices share a single harmonic context (`src/audio/harmony.js`) so that, at any instant, the pad, choir, bass, arpeggio and melody all agree on which chord is sounding. This is what keeps the music coherent instead of each voice wandering through the scale independently.
+
+**Chord progressions.** A chord is stored as a root *scale degree* (an index into the active scale). Building the triad by stacking diatonic thirds — degree, +2, +4 — automatically yields the correct chord quality for whatever mode is active (minor in Aeolian, major in Lydian, and so on). A small library of progressions is defined as degree sequences; 7-note scales draw from classic resolving motions (`i–iv–v–i`, `i–VI–iv–v`, `i–VI–ii–v`, …) and 5-note pentatonic scales from gentler ones. Every chord is diatonic, so the same progression sounds good in any mode.
+
+**The chord clock.** The progression advances on a beat clock: each chord lasts `state.chordBeats` beats — set live by the **Chord** control in Manual mode, and re-rolled to 4 or 8 each era in Infinite mode. `harmony.tick(now)` runs once per scheduler tick at the real audio time, so every voice scheduling within the lookahead window reads the same current chord. A new progression is drawn whenever the scale changes — at the start of playback and on each era transition.
+
+**How voices use it:**
+
+| Voice role | Behaviour |
+|---|---|
+| **Triadic** (pad, choir, organ, strings) | Play the current chord directly via `harmony.chordMidis()` — octave-correct ascending voicings. |
+| **Arpeggio / harp** | Arpeggiate the current chord across octaves (4–7 stacked thirds), so every note of the sweep is a chord tone. |
+| **Bass** | Locks to the chord root, occasionally its fifth; the walking style steps root – third – fifth – third through the current chord. |
+| **Melodic** (melody, flute, bell, rhodes, vibraphone, kalimba, pluck, mallet, clavinet, sitar, brass, texture, glass) | Bias note choice toward chord tones (strength set by the **Harmony** control, default ~78%) while still allowing passing tones for melodic colour, and keep their existing stepwise-motion logic. |
+| **Drone** | Stays on the global tonic (root + fifth) as a pedal tone, grounding the progression underneath. |
+
 ### Reverb
 
 A convolution reverb is synthesised at startup by filling a stereo buffer with exponentially-decaying white noise: `amplitude = random × (1 − i/length)^2.8`. Duration is 4 seconds. The reverb output feeds into the master chain through a separate `reverbGain` node (0.45). Both `masterGain` and `reverbGain` are controlled together for instant mute/unmute without leaving orphaned reverb tails.
@@ -159,9 +179,10 @@ Each drifts by ±0.001–0.002 per tick.
 
 1. **Root note** shifts by a musical interval from `[−7, −5, −2, 0, 0, 2, 5, 7]` semitones (doubled `0` makes staying in key twice as likely), bounded to MIDI 24–48
 2. **Scale** changes to a random mode
-3. **Tempo** drifts ±8 BPM, bounded to 52–130 BPM
-4. **Brightness, spaciousness, density** jump to new random values
-5. A new set of 3–5 voices is drawn from the pool
+3. **Chord progression** is re-drawn for the new scale (see Harmony engine)
+4. **Tempo** drifts ±8 BPM, bounded to 52–130 BPM
+5. **Brightness, spaciousness, density** jump to new random values
+6. A new set of 3–5 voices is drawn from the pool
 
 ---
 
@@ -209,8 +230,9 @@ Orbits the origin at radius 7.5, angle incrementing by `0.0035 + energy×0.0018`
 ```
 setInterval (60ms)
   └─ tick()
-       ├─ bassVoice.tick()       → masterGain
-       ├─ [active voices].tick() → masterGain / reverbNode
+       ├─ harmony.tick()         → advances chord progression on the beat clock
+       ├─ bassVoice.tick()       → masterGain   (reads current chord)
+       ├─ [active voices].tick() → masterGain / reverbNode   (read current chord)
        └─ evolve()               → drifts state, fires era (infinite mode only)
 
 masterGain → AnalyserNode → AudioDestination

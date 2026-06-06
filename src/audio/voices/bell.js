@@ -1,5 +1,6 @@
 import { audio } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 export const bellVoice = (() => {
   let nextTime = 0;
@@ -9,8 +10,8 @@ export const bellVoice = (() => {
     const wait = beat() * pick([2, 3, 4, 4]);
     if (Math.random() < 0.3) return wait;
 
-    const notes = scaleNotes(state.rootMidi + 48, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
-    const hz   = midiToHz(pick(notes));
+    const notes = scaleNotes(state.rootBase + 36, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
+    const hz   = midiToHz(harmony.pickChordTone(notes));
     const dur  = rand(2.5, 5.0);
     const gain = rand(0.06, 0.11);
 

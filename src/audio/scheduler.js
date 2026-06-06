@@ -1,5 +1,6 @@
 import { audio } from './context.js';
 import { state, SCALE_NAMES, TICK_MS, rand, pick } from '../state.js';
+import { harmony } from './harmony.js';
 
 import { bassVoice }     from './voices/bass.js';
 import { padVoice }      from './voices/pad.js';
@@ -68,10 +69,13 @@ export function advanceEra() {
   const shifts = [-7, -5, -2, 0, 0, 2, 5, 7];
   state.rootMidi     = Math.max(24, Math.min(48, state.rootMidi + pick(shifts)));
   state.scaleIdx     = Math.floor(Math.random() * SCALE_NAMES.length);
-  state.tempo        = Math.max(52, Math.min(130, state.tempo + rand(-8, 8)));
+  const tempoShift   = Math.random() < 0.3 ? rand(-35, 35) : rand(-15, 15);
+  state.tempo        = Math.max(52, Math.min(130, state.tempo + tempoShift));
   state.brightness   = rand(0.1, 0.9);
   state.spaciousness = rand(0.2, 0.85);
   state.density      = rand(0.2, 0.9);
+  state.chordBeats   = pick([4, 4, 8]);
+  harmony.reroll();
   pickVoices();
   bassVoice.reroll();
   drumsVoice.reroll();
@@ -99,6 +103,7 @@ export function tick({ skipBass = false, skipEvolve = false } = {}) {
   const dt  = now - (lastTickTime || now);
   lastTickTime = now;
 
+  harmony.tick(now);
   if (!skipBass) bassVoice.tick(now);
   for (const v of activeVoices) v.tick(now);
   if (!skipEvolve) evolve(dt);

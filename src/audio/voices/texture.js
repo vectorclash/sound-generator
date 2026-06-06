@@ -1,5 +1,6 @@
 import { audio } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { harmony } from '../harmony.js';
 
 export const textureVoice = (() => {
   let nextTime = 0;
@@ -9,8 +10,8 @@ export const textureVoice = (() => {
     const wait = beat() * rand(1, 4);
     if (Math.random() < 0.4) return wait;
 
-    const notes = scaleNotes(state.rootMidi + 48, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
-    const hz    = midiToHz(pick(notes));
+    const notes = scaleNotes(state.rootBase + 24, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
+    const hz    = midiToHz(harmony.pickChordTone(notes));
     const gain  = rand(0.03, 0.07);
     const dur   = rand(1.5, 4.0);
     const osc   = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
