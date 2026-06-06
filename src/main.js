@@ -102,6 +102,7 @@ const clearInstrumentsBtn  = document.getElementById('clear-instruments-btn');
 const manualShareBtn       = document.getElementById('manual-share-btn');
 const modeTabs             = document.querySelectorAll('.mode-tab');
 const panelToggleBtn       = document.getElementById('panel-toggle');
+const panelHideBtn         = document.getElementById('panel-hide-btn');
 let panelVisible = true;
 
 // ─── Enable state (all off by default) ───────────────────────────────────────
@@ -388,23 +389,26 @@ modeTabs.forEach(tab => {
     if (mode === 'manual') {
       panelVisible = true;
       manualUi.classList.add('active');
-      panelToggleBtn.style.display = 'block';
-      panelToggleBtn.textContent = 'HIDE';
+      panelToggleBtn.style.display = 'none';
       if (!Object.values(manualEnabled).some(v => v)) randomize();
     } else {
+      panelVisible = false;
+      manualUi.classList.remove('active');
       panelToggleBtn.style.display = 'none';
     }
   });
 });
 
+panelHideBtn.addEventListener('click', () => {
+  panelVisible = false;
+  manualUi.classList.remove('active');
+  panelToggleBtn.style.display = 'block';
+});
+
 panelToggleBtn.addEventListener('click', () => {
-  panelVisible = !panelVisible;
-  manualUi.classList.toggle('active', panelVisible);
-  panelToggleBtn.style.opacity = '0';
-  setTimeout(() => {
-    panelToggleBtn.textContent = panelVisible ? 'HIDE' : 'SHOW';
-    panelToggleBtn.style.opacity = '';
-  }, 150);
+  panelVisible = true;
+  manualUi.classList.add('active');
+  panelToggleBtn.style.display = 'none';
 });
 
 // ─── Infinite mode ────────────────────────────────────────────────────────────
@@ -422,6 +426,7 @@ function stopInfinite() {
   clearInterval(infiniteInterval);
   infiniteInterval = null;
   infiniteRunning  = false;
+  muteAudio();
   startBtn.textContent = 'PLAY';
   startBtn.classList.remove('playing');
   infoEl.classList.remove('active');

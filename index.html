@@ -602,27 +602,49 @@
       }
     }
 
-    #panel-toggle {
-      display: none;
-      position: fixed;
-      top: 62px;
-      left: 50%;
-      transform: translateX(-50%);
+    #panel-hide-btn {
+      display: block;
+      width: 100%;
       background: transparent;
-      border: 1px solid #2a3a4a;
-      color: #556677;
+      border: none;
+      color: #4a5a6a;
       font-family: inherit;
       font-size: 9px;
-      padding: 4px 14px;
+      padding: 0 0 8px;
+      margin-bottom: 8px;
       cursor: pointer;
       letter-spacing: 3px;
       text-transform: uppercase;
-      transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+      text-align: center;
+      transition: color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #panel-hide-btn:hover { color: #aabece; }
+
+    #panel-toggle {
+      display: none;
+      position: fixed;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(8, 8, 14, 0.5);
+      border: 1px solid #4a5a6a;
+      color: #7a8a9a;
+      font-family: inherit;
+      font-size: clamp(14px, 4vw, 18px);
+      padding: clamp(10px, 3vw, 14px) clamp(28px, 8vw, 52px);
+      cursor: pointer;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      transition: border-color 0.2s, color 0.2s, opacity 0.15s;
       z-index: 2;
       pointer-events: all;
+      white-space: nowrap;
       -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
-    #panel-toggle:hover { border-color: #6a8aaa; color: #aabece; }
+    #panel-toggle:hover { border-color: #aabece; color: #d0dde8; }
     #panel-toggle:active { opacity: 0.4; }
   </style>
 </head>
@@ -635,7 +657,7 @@
       <button class="mode-tab active" data-mode="infinite">INFINITE</button>
       <button class="mode-tab" data-mode="manual">MANUAL</button>
     </div>
-    <button id="panel-toggle">HIDE</button>
+    <button id="panel-toggle">SHOW</button>
 
     <!-- Infinite mode -->
     <div id="infinite-ui">
@@ -646,6 +668,7 @@
 
     <!-- Manual mode -->
     <div id="manual-ui">
+      <button id="panel-hide-btn">HIDE</button>
 
       <!-- Genre presets -->
       <div class="collapsible-section" id="section-genre">
