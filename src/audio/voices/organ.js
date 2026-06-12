@@ -36,7 +36,7 @@ export const organVoice = (() => {
       for (const [ratio, vol] of DRAWBARS) {
         const osc = ctx.createOscillator(), dGain = ctx.createGain();
         osc.type = 'sine'; osc.frequency.value = hz * ratio;
-        dGain.gain.value = rand(0.03, 0.05) * vol;
+        dGain.gain.value = rand(0.045, 0.07) * vol;
         osc.connect(dGain); dGain.connect(adsr);
         osc.start(t); osc.stop(t + dur + 0.05);
       }

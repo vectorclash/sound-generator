@@ -92,6 +92,7 @@
       font-family: inherit;
       font-size: clamp(18px, 5vw, 28px);
       padding: clamp(16px, 4vw, 22px) clamp(40px, 10vw, 72px);
+      margin-bottom: 12px;
       cursor: pointer;
       letter-spacing: 4px;
       text-transform: uppercase;
@@ -191,17 +192,15 @@
 
     /* ─── Manual panel ────────────────────────────────────────────────────── */
     #manual-ui {
+      --pad: clamp(14px, 3.5vw, 26px);
       pointer-events: none;
+      display: flex;
+      flex-direction: column;
       width: min(500px, 92vw);
       max-height: 72vh;
-      overflow-y: auto;
+      overflow: hidden;
       background: rgba(4, 5, 10, 0.8);
       border: 1px solid #4a5a6a;
-      padding: clamp(14px, 3.5vw, 26px);
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: thin;
-      scrollbar-color: #3a4a5a transparent;
-      scrollbar-gutter: stable both-edges;
       visibility: hidden;
       opacity: 0;
       transform: translateY(-16px) scale(0.97);
@@ -215,8 +214,21 @@
       pointer-events: all;
       transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s;
     }
-    #manual-ui::-webkit-scrollbar { width: 3px; }
-    #manual-ui::-webkit-scrollbar-thumb { background: #3a4a5a; }
+    /* Scrollable body lives below the (non-scrolling) HIDE button so the
+       button stays flush at the panel's top edge with nothing behind it. */
+    #manual-ui-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: var(--pad);
+      padding-top: 8px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: #3a4a5a transparent;
+      scrollbar-gutter: stable both-edges;
+    }
+    #manual-ui-scroll::-webkit-scrollbar { width: 3px; }
+    #manual-ui-scroll::-webkit-scrollbar-thumb { background: #3a4a5a; }
 
     /* control rows */
     .ctrl-row {
@@ -534,7 +546,19 @@
     /* ─── Mobile overrides ──────────────────────────────────────────────────── */
     @media (max-width: 600px) {
       #manual-ui {
-        max-height: calc(100dvh - 80px);
+        width: calc(100vw - 20px);
+        /* #manual-ui is centered by the body's flexbox: when its content
+           overflows and gets clipped to max-height, its centered top edge
+           sits at (100dvh − max-height) / 2. Subtracting 150px here keeps
+           that edge ≥ ~75px from the viewport top — clear of the fixed
+           #mode-tabs (~60px tall) with room to spare. */
+        max-height: calc(100dvh - 150px);
+        --pad: 16px;
+      }
+
+      #manual-ui-scroll {
+        padding-left: 14px;
+        padding-right: 14px;
       }
 
       /* bigger mode tab tap targets */
@@ -544,11 +568,35 @@
         letter-spacing: 2px;
       }
 
+      /* sliders need more room to breathe so thumbs don't overlap */
+      .ctrl-row {
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+
       /* readable labels */
-      .ctrl-label  { font-size: 11px; letter-spacing: 2px; }
+      .ctrl-label  { font-size: 11px; letter-spacing: 1.5px; min-width: 50px; }
       .section-label { font-size: 11px; letter-spacing: 2px; }
       .group-label { font-size: 11px; letter-spacing: 2px; }
       .ctrl-unit   { font-size: 11px; }
+      .ctrl-value  { font-size: 13px; min-width: 3.5ch; text-align: right; }
+
+      /* bigger slider thumbs — easier to grab with a thumb (the finger kind) */
+      .feel-slider::-webkit-slider-thumb {
+        width: 30px;
+        height: 30px;
+        margin-top: -13px;
+      }
+      .feel-slider::-moz-range-thumb {
+        width: 30px;
+        height: 30px;
+      }
+      #manual-bpm-slider::-webkit-slider-thumb,
+      #manual-bpm-slider::-moz-range-thumb {
+        width: 32px;
+        height: 32px;
+      }
+      #manual-bpm-slider::-webkit-slider-thumb { margin-top: -14px; }
 
       /* section headers: bigger tap target */
       .section-header { padding: 8px 6px; margin-bottom: 8px; }
@@ -602,21 +650,32 @@
       }
     }
 
+    /* ─── Short-viewport overrides (landscape phones) ───────────────────────
+       #manual-ui is centered by the body's flexbox; on short viewports that
+       centered position can land underneath the fixed #mode-tabs. Capping
+       the panel's height keeps its centered top edge below the tab bar. */
+    @media (max-height: 480px) {
+      #manual-ui {
+        max-height: calc(100dvh - 150px);
+      }
+    }
+
     #panel-hide-btn {
       display: block;
+      flex-shrink: 0;
       width: 100%;
-      background: transparent;
+      background: rgba(6, 8, 15, 0.92);
       border: none;
+      border-bottom: 1px solid #2a3540;
       color: #4a5a6a;
       font-family: inherit;
       font-size: 9px;
-      padding: 0 0 8px;
-      margin-bottom: 8px;
+      padding: calc(var(--pad) - 8px) 0 12px;
       cursor: pointer;
       letter-spacing: 3px;
       text-transform: uppercase;
       text-align: center;
-      transition: color 0.15s;
+      transition: color 0.15s, border-color 0.2s;
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
@@ -662,7 +721,7 @@
     <!-- Infinite mode -->
     <div id="infinite-ui">
       <button id="start-btn">PLAY</button>
-      <div id="info">infinite generative music<br>shifts over time</div>
+      <div id="info"></div>
       <div id="state-line"></div>
     </div>
 
@@ -670,6 +729,7 @@
     <div id="manual-ui">
       <button id="panel-hide-btn">HIDE</button>
 
+      <div id="manual-ui-scroll">
       <!-- Genre presets -->
       <div class="collapsible-section" id="section-genre">
         <div class="section-header">
@@ -762,6 +822,7 @@
       <div id="export-countdown"></div>
       <div id="export-progress-wrap"><div id="export-progress-bar"></div></div>
       <div id="manual-status"></div>
+      </div>
     </div>
 
   </div>

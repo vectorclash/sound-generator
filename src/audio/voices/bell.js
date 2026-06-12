@@ -13,7 +13,7 @@ export const bellVoice = (() => {
     const notes = scaleNotes(state.rootBase + 36, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
     const hz   = midiToHz(harmony.pickChordTone(notes));
     const dur  = rand(2.5, 5.0);
-    const gain = rand(0.06, 0.11);
+    const gain = rand(0.07, 0.12);
 
     // Four inharmonic partials — each with its own decay rate (higher partials die faster)
     for (const [ratio, relGain, decayMul] of [

@@ -24,7 +24,7 @@ export const melodyVoice = (() => {
 
     const hz   = midiToHz(midi);
     const dur  = beat() * pick([0.5, 0.5, 1, 1, 1.5, 2]);
-    const gain = rand(0.07, 0.14) * lerp(0.4, 1.0, state.density);
+    const gain = rand(0.09, 0.16) * lerp(0.55, 1.0, state.density);
     const osc  = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
     osc.type = Math.random() < 0.5 ? 'sine' : 'triangle';
     osc.frequency.value = hz; osc.detune.value = rand(-4, 4);

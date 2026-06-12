@@ -13,7 +13,7 @@ export const glassVoice = (() => {
     const notes = scaleNotes(state.rootBase + 36, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
     const hz   = midiToHz(harmony.pickChordTone(notes));
     const dur  = rand(3.0, 7.0);
-    const gain = rand(0.04, 0.08);
+    const gain = rand(0.06, 0.10);
 
     // FM: modulator at 1.003x creates subtle beating shimmer
     const mod = ctx.createOscillator(), modGain = ctx.createGain();

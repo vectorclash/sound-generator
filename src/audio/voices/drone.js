@@ -9,7 +9,7 @@ export const droneVoice = (() => {
     const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
     const notes = [state.rootBase + 12, state.rootBase + 12 + scale[4]]; // root + fifth
     const dur   = beat() * pick([8, 12, 16]);
-    const gain  = rand(0.04, 0.08);
+    const gain  = rand(0.06, 0.10);
 
     for (const midi of notes) {
       const hz  = midiToHz(midi);

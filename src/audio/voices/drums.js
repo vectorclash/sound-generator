@@ -160,10 +160,10 @@ export const drumsVoice = (() => {
 
     // Scale gains with musical state
     const densityMod = 0.5 + state.density * 0.5;
-    const kGain = rand(0.28, 0.36) * densityMod;
-    const sGain = rand(0.15, 0.22) * densityMod;
-    const hGain = rand(0.06, 0.10) * (0.4 + state.brightness * 0.6);
-    const cGain = rand(0.13, 0.19) * densityMod;
+    const kGain = rand(0.34, 0.43) * densityMod;
+    const sGain = rand(0.19, 0.27) * densityMod;
+    const hGain = rand(0.07, 0.11) * (0.4 + state.brightness * 0.6);
+    const cGain = rand(0.16, 0.23) * densityMod;
 
     for (let i = 0; i < 16; i++) {
       const st = t + i * stepDur;

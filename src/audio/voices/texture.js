@@ -12,7 +12,7 @@ export const textureVoice = (() => {
 
     const notes = scaleNotes(state.rootBase + 24, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
     const hz    = midiToHz(harmony.pickChordTone(notes));
-    const gain  = rand(0.03, 0.07);
+    const gain  = rand(0.05, 0.09);
     const dur   = rand(1.5, 4.0);
     const osc   = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
     osc.type = 'sine'; osc.frequency.value = hz;

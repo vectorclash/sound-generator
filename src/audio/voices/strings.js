@@ -9,7 +9,7 @@ export const stringsVoice = (() => {
     const { ctx, masterGain, reverbNode } = audio;
     const chord  = harmony.chordMidis(state.rootBase + 12, 3);
     const dur    = beat() * pick([4, 6, 8]);
-    const gain   = rand(0.05, 0.09);
+    const gain   = rand(0.07, 0.11);
 
     for (const midi of chord) {
       const hz = midiToHz(midi);

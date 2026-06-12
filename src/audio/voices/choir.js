@@ -9,7 +9,7 @@ export const choirVoice = (() => {
     const { ctx, masterGain, reverbNode } = audio;
     const chord  = harmony.chordMidis(state.rootBase + 24, 3);
     const dur    = beat() * pick([6, 8, 10]);
-    const gain   = rand(0.04, 0.08);
+    const gain   = rand(0.06, 0.10);
 
     for (const midi of chord) {
       // 3 detuned sines per note for choir width
