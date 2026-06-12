@@ -72,6 +72,7 @@ const infoEl          = document.getElementById('info');
 const stateEl         = document.getElementById('state-line');
 const infiniteUi      = document.getElementById('infinite-ui');
 const manualUi        = document.getElementById('manual-ui');
+const manualUiScroll  = document.getElementById('manual-ui-scroll');
 const genreBtnsEl     = document.getElementById('genre-btns');
 const rootSelect      = document.getElementById('manual-root');
 const scaleSelect     = document.getElementById('manual-scale');
@@ -400,9 +401,8 @@ modeTabs.forEach(tab => {
 });
 
 panelHideBtn.addEventListener('click', () => {
-  panelVisible = false;
-  manualUi.classList.remove('active');
-  panelToggleBtn.style.display = 'block';
+  const collapsed = manualUi.classList.toggle('collapsed');
+  panelHideBtn.textContent = collapsed ? 'SHOW' : 'HIDE';
 });
 
 panelToggleBtn.addEventListener('click', () => {
@@ -633,6 +633,11 @@ manualExportBtn.addEventListener('click', () => {
   }
 
   if (manualPlaying) stopManualPlayback();
+
+  document.querySelectorAll('.collapsible-section').forEach(section => {
+    section.classList.add('collapsed');
+  });
+  manualUiScroll.scrollTo({ top: manualUiScroll.scrollHeight, behavior: 'smooth' });
 
   const myId        = ++exportId;
   const durationSec = Math.max(5, parseInt(lengthInput.value, 10) || 10);
