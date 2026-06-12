@@ -212,24 +212,37 @@
       opacity: 0;
       transform: translate(-50%, calc(-50% - 16px)) scale(0.97);
       transform-origin: top center;
-      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s, max-width 0.3s ease;
+      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s, background-color 0.3s ease, border-color 0.3s ease;
     }
     #manual-ui.active {
       visibility: visible;
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
       pointer-events: all;
-      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s, max-width 0.3s ease;
+      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s, background-color 0.3s ease, border-color 0.3s ease;
     }
-    /* Collapsed: shrink to a pill around the hide/show button and slide
-       it down to rest above the bottom edge of the viewport. */
+    /* Collapsed: shrink to a pill around the hide/show button and slide it
+       down to rest above the bottom edge of the viewport. The panel's own
+       width/height never change here -- only its background/border fade
+       out and the HIDE button shrinks to a pill via its own width/margin.
+       Keeping #manual-ui's box size constant means the "-50%, -50%" centering
+       transform always resolves to the same value, so the extra vertical
+       offset added here can be a plain constant (no `%` of a box whose size
+       is also changing) -- that's what was desyncing the slide on mobile. */
     #manual-ui.collapsed {
-      max-width: 140px;
-      transform: translate(-50%, calc(50vh - 36px - 100%)) scale(1);
+      pointer-events: none;
+      background: transparent;
+      border-color: transparent;
+      transform: translate(-50%, calc(50vh - 84px)) scale(1);
     }
     #manual-ui.collapsed #panel-hide-btn {
+      pointer-events: all;
+      width: 140px;
+      margin: 0 auto;
       font-size: 13px;
       padding: 16px 0;
+      border: 1px solid #4a5a6a;
+      background: rgba(6, 8, 15, 0.92);
     }
     /* Scrollable body lives below the (non-scrolling) HIDE button so the
        button stays flush at the panel's top edge with nothing behind it. */
@@ -246,17 +259,16 @@
       scrollbar-color: #3a4a5a transparent;
       scrollbar-gutter: stable both-edges;
       opacity: 1;
-      transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease;
+      transition: opacity 0.2s ease;
     }
     #manual-ui-scroll::-webkit-scrollbar { width: 3px; }
     #manual-ui-scroll::-webkit-scrollbar-thumb { background: #3a4a5a; }
 
+    /* Stays the same size (so #manual-ui's height doesn't change) but
+       fades out and stops receiving input. */
     #manual-ui.collapsed #manual-ui-scroll {
-      max-height: 0;
       opacity: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-      overflow: hidden;
+      pointer-events: none;
     }
 
     /* control rows */
@@ -576,10 +588,11 @@
     @media (max-width: 600px) {
       #manual-ui {
         width: calc(100vw - 20px);
-        /* #manual-ui is centered by the body's flexbox: when its content
-           overflows and gets clipped to max-height, its centered top edge
-           sits at (100dvh − max-height) / 2. Subtracting 150px here keeps
-           that edge ≥ ~75px from the viewport top — clear of the fixed
+        /* #manual-ui is centered on the viewport via fixed positioning +
+           translate(-50%, -50%): when its content overflows and gets
+           clipped to max-height, its centered top edge sits at
+           (100dvh − max-height) / 2. Subtracting 150px here keeps that
+           edge ≥ ~75px from the viewport top — clear of the fixed
            #mode-tabs (~60px tall) with room to spare. */
         max-height: calc(100dvh - 150px);
         --pad: 16px;
@@ -680,9 +693,10 @@
     }
 
     /* ─── Short-viewport overrides (landscape phones) ───────────────────────
-       #manual-ui is centered by the body's flexbox; on short viewports that
-       centered position can land underneath the fixed #mode-tabs. Capping
-       the panel's height keeps its centered top edge below the tab bar. */
+       #manual-ui is centered on the viewport via translate(-50%, -50%); on
+       short viewports that centered position can land underneath the fixed
+       #mode-tabs. Capping the panel's height keeps its centered top edge
+       below the tab bar. */
     @media (max-height: 480px) {
       #manual-ui {
         max-height: calc(100dvh - 150px);
@@ -704,7 +718,7 @@
       letter-spacing: 3px;
       text-transform: uppercase;
       text-align: center;
-      transition: color 0.15s, border-color 0.2s;
+      transition: color 0.15s, border-color 0.3s ease, background-color 0.3s ease, width 0.3s ease, margin 0.3s ease, font-size 0.3s ease, padding 0.3s ease;
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
