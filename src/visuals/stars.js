@@ -5,75 +5,7 @@ import { scene } from './scene.js';
 const texLoader = new THREE.TextureLoader();
 const smallTex  = texLoader.load('images/star-sprite-small.png');
 
-// Large star halo — smooth radial glow, no crosshair lines.
-// Crosshairs from the old PNG caused colorful sparkle artifacts on mobile when
-// differently-coloured halo sprites overlapped in the narrow portrait FOV.
-function makeLargeHaloTex() {
-  const s = 512, h = s / 2;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = s;
-  const ctx = canvas.getContext('2d');
-  const grad = ctx.createRadialGradient(h, h, 0, h, h, h);
-  grad.addColorStop(0.00, 'rgba(255,255,255,1.0)');
-  grad.addColorStop(0.15, 'rgba(255,255,255,0.80)');
-  grad.addColorStop(0.35, 'rgba(255,255,255,0.50)');
-  grad.addColorStop(0.60, 'rgba(255,255,255,0.15)');
-  grad.addColorStop(0.80, 'rgba(255,255,255,0.04)');
-  grad.addColorStop(1.00, 'rgba(255,255,255,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, s, s);
-  return new THREE.CanvasTexture(canvas);
-}
-
-const largeTex = makeLargeHaloTex();
-
-function makeLargeCoreTex() {
-  const sz = 256, c = sz / 2;
-  const cv  = document.createElement('canvas');
-  cv.width  = cv.height = sz;
-  const ctx = cv.getContext('2d');
-
-  // Horizontal glare line: fades to zero well before the tips so that glare
-  // spikes from adjacent differently-coloured stars don't overlap and create
-  // coloured fringe artefacts on high-DPR (mobile) displays
-  const hg = ctx.createLinearGradient(0, 0, sz, 0);
-  hg.addColorStop(0.00, 'rgba(255,255,255,0)');
-  hg.addColorStop(0.28, 'rgba(255,255,255,0)');
-  hg.addColorStop(0.40, 'rgba(255,255,255,0.40)');
-  hg.addColorStop(0.50, 'rgba(255,255,255,1.0)');
-  hg.addColorStop(0.60, 'rgba(255,255,255,0.40)');
-  hg.addColorStop(0.72, 'rgba(255,255,255,0)');
-  hg.addColorStop(1.00, 'rgba(255,255,255,0)');
-  ctx.fillStyle = hg;
-  ctx.fillRect(0, c - 1, sz, 2);
-
-  // Vertical glare line
-  const vg = ctx.createLinearGradient(0, 0, 0, sz);
-  vg.addColorStop(0.00, 'rgba(255,255,255,0)');
-  vg.addColorStop(0.28, 'rgba(255,255,255,0)');
-  vg.addColorStop(0.40, 'rgba(255,255,255,0.40)');
-  vg.addColorStop(0.50, 'rgba(255,255,255,1.0)');
-  vg.addColorStop(0.60, 'rgba(255,255,255,0.40)');
-  vg.addColorStop(0.72, 'rgba(255,255,255,0)');
-  vg.addColorStop(1.00, 'rgba(255,255,255,0)');
-  ctx.fillStyle = vg;
-  ctx.fillRect(c - 1, 0, 2, sz);
-
-  // Bright core — expanded radius covers the dark disk area of the halo PNG
-  // so small star sprites behind it don't show through as coloured particles
-  const core = ctx.createRadialGradient(c, c, 0, c, c, c * 0.52);
-  core.addColorStop(0.00, 'rgba(255,255,255,1.0)');
-  core.addColorStop(0.20, 'rgba(255,255,255,0.85)');
-  core.addColorStop(0.50, 'rgba(255,255,255,0.45)');
-  core.addColorStop(0.80, 'rgba(255,255,255,0.12)');
-  core.addColorStop(1.00, 'rgba(255,255,255,0)');
-  ctx.fillStyle = core;
-  ctx.fillRect(0, 0, sz, sz);
-
-  return new THREE.CanvasTexture(cv);
-}
-
-const largeCoreTex = makeLargeCoreTex();
+const largeTex = texLoader.load('images/star-sprite-large.png');
 
 // ─── Star cluster config ──────────────────────────────────────────────────────
 const CLUSTER = {
@@ -197,35 +129,21 @@ export const LARGE_COUNT = 80;
 const largeLayer = makeStarLayer(LARGE_COUNT, 8, 35, 0.2, 0.7);
 
 const largeSprites = [];
-const coreSprites  = [];
 for (let i = 0; i < LARGE_COUNT; i++) {
   const baseScale = 1.5 + Math.random() * 5.5;
   const px = largeLayer.pos[i * 3], py = largeLayer.pos[i * 3 + 1], pz = largeLayer.pos[i * 3 + 2];
 
-  // Halo sprite — original PNG, handles the soft outer glow
-  const haloMat = new THREE.SpriteMaterial({
+  const mat = new THREE.SpriteMaterial({
     map: largeTex, color: 0xffffff,
     transparent: true, opacity: 1.0,
     blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
   });
-  const halo = new THREE.Sprite(haloMat);
-  halo.userData.baseScale = baseScale;
-  halo.scale.setScalar(baseScale);
-  halo.position.set(px, py, pz);
-  scene.add(halo);
-  largeSprites.push(halo);
-
-  // Core overlay — generated texture, handles center point + hard glare lines
-  const coreMat = new THREE.SpriteMaterial({
-    map: largeCoreTex, color: 0xffffff,
-    transparent: true, opacity: 1.0,
-    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-  });
-  const core = new THREE.Sprite(coreMat);
-  core.scale.setScalar(baseScale);
-  core.position.set(px, py, pz);
-  scene.add(core);
-  coreSprites.push(core);
+  const sprite = new THREE.Sprite(mat);
+  sprite.userData.baseScale = baseScale;
+  sprite.scale.setScalar(baseScale);
+  sprite.position.set(px, py, pz);
+  scene.add(sprite);
+  largeSprites.push(sprite);
 }
 
 // ─── Flow field constants ─────────────────────────────────────────────────────
@@ -285,7 +203,6 @@ export function updateStars(energy, bass, hue, t) {
   smallMat.size    = 0.6 + energy * 0.15 + bass * 0.10;
   smallMat.opacity = 0.9;
 
-  // Large sprites: halo (original PNG) + core overlay (generated) move and color together
   const audioPulse = 1.0 + energy * 0.6 + bass * 0.5;
   const lh = largeLayer.hueFixed, lv = largeLayer.hueVal,
         ls = largeLayer.satVal,   ll = largeLayer.litVal;
@@ -294,13 +211,8 @@ export function updateStars(energy, bass, hue, t) {
     _col.setHSL(h, ls[i], ll[i]);
     const px = largeLayer.pos[i * 3], py = largeLayer.pos[i * 3 + 1], pz = largeLayer.pos[i * 3 + 2];
     const sc = largeSprites[i].userData.baseScale * audioPulse;
-
     largeSprites[i].material.color.copy(_col);
     largeSprites[i].position.set(px, py, pz);
     largeSprites[i].scale.setScalar(sc);
-
-    coreSprites[i].material.color.copy(_col);
-    coreSprites[i].position.set(px, py, pz);
-    coreSprites[i].scale.setScalar(sc * 1.6);
   }
 }
