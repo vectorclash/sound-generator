@@ -1,8 +1,8 @@
 # Infinite Music Generator
 
-A self-contained, browser-based generative music system. Built entirely with the Web Audio API and Three.js — no server, no build step, no dependencies beyond a CDN script tag.
+A self-contained, browser-based generative music system. Built entirely with the Web Audio API and Three.js — no server, no runtime dependencies beyond a CDN script tag.
 
-Open `index.html` in any modern browser.
+Run `npm install && npm run dev` and open `http://localhost:8000/` (ES modules need to be served over HTTP, not opened via `file://`).
 
 ---
 
@@ -268,4 +268,4 @@ Export path (manual mode)
 | [Three.js](https://threejs.org/) | r175 | 3D rendering (loaded from CDN) |
 | Web Audio API | — | Sound synthesis (built into browser) |
 
-No build tools, no npm, no bundler. The entire application is a single HTML file plus JS modules.
+The app is bundled with [esbuild](https://esbuild.github.io/) (`npm run build`) into a single content-hashed JS file for production deploys; `three` is still loaded unbundled via the CDN import map. See `scripts/build.js`.

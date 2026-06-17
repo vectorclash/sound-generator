@@ -1,0 +1,7 @@
+<FilesMatch "\.html$">
+  Header set Cache-Control "no-cache, must-revalidate"
+</FilesMatch>
+
+<FilesMatch "\.(png|jpe?g|gif|svg|webp)$">
+  Header set Cache-Control "no-cache, must-revalidate"
+</FilesMatch>

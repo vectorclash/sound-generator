@@ -10,3 +10,7 @@ Thumbs.db
 # Environment/Secret files
 .env
 *.log
+
+# Build output / dependencies
+node_modules/
+dist/
