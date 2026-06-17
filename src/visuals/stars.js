@@ -5,10 +5,27 @@ import { scene } from './scene.js';
 const texLoader = new THREE.TextureLoader();
 const smallTex  = texLoader.load('images/star-sprite-small.png');
 
-// Large star: original PNG for the halo glow (works fine with additive blending),
-// plus a generated overlay with the center core + hard glare lines
-// (white-on-transparent so they correctly receive material.color tinting).
-const largeTex = texLoader.load('images/star-sprite-large.png');
+// Large star halo — smooth radial glow, no crosshair lines.
+// Crosshairs from the old PNG caused colorful sparkle artifacts on mobile when
+// differently-coloured halo sprites overlapped in the narrow portrait FOV.
+function makeLargeHaloTex() {
+  const s = 512, h = s / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = s;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(h, h, 0, h, h, h);
+  grad.addColorStop(0.00, 'rgba(255,255,255,1.0)');
+  grad.addColorStop(0.15, 'rgba(255,255,255,0.80)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.50)');
+  grad.addColorStop(0.60, 'rgba(255,255,255,0.15)');
+  grad.addColorStop(0.80, 'rgba(255,255,255,0.04)');
+  grad.addColorStop(1.00, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, s, s);
+  return new THREE.CanvasTexture(canvas);
+}
+
+const largeTex = makeLargeHaloTex();
 
 function makeLargeCoreTex() {
   const sz = 256, c = sz / 2;
