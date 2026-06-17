@@ -16,12 +16,16 @@ function makeLargeCoreTex() {
   cv.width  = cv.height = sz;
   const ctx = cv.getContext('2d');
 
-  // Horizontal glare line: crisp 2px, fades tip-to-tip
+  // Horizontal glare line: fades to zero well before the tips so that glare
+  // spikes from adjacent differently-coloured stars don't overlap and create
+  // coloured fringe artefacts on high-DPR (mobile) displays
   const hg = ctx.createLinearGradient(0, 0, sz, 0);
   hg.addColorStop(0.00, 'rgba(255,255,255,0)');
-  hg.addColorStop(0.28, 'rgba(255,255,255,0.40)');
+  hg.addColorStop(0.28, 'rgba(255,255,255,0)');
+  hg.addColorStop(0.40, 'rgba(255,255,255,0.40)');
   hg.addColorStop(0.50, 'rgba(255,255,255,1.0)');
-  hg.addColorStop(0.72, 'rgba(255,255,255,0.40)');
+  hg.addColorStop(0.60, 'rgba(255,255,255,0.40)');
+  hg.addColorStop(0.72, 'rgba(255,255,255,0)');
   hg.addColorStop(1.00, 'rgba(255,255,255,0)');
   ctx.fillStyle = hg;
   ctx.fillRect(0, c - 1, sz, 2);
@@ -29,18 +33,23 @@ function makeLargeCoreTex() {
   // Vertical glare line
   const vg = ctx.createLinearGradient(0, 0, 0, sz);
   vg.addColorStop(0.00, 'rgba(255,255,255,0)');
-  vg.addColorStop(0.28, 'rgba(255,255,255,0.40)');
+  vg.addColorStop(0.28, 'rgba(255,255,255,0)');
+  vg.addColorStop(0.40, 'rgba(255,255,255,0.40)');
   vg.addColorStop(0.50, 'rgba(255,255,255,1.0)');
-  vg.addColorStop(0.72, 'rgba(255,255,255,0.40)');
+  vg.addColorStop(0.60, 'rgba(255,255,255,0.40)');
+  vg.addColorStop(0.72, 'rgba(255,255,255,0)');
   vg.addColorStop(1.00, 'rgba(255,255,255,0)');
   ctx.fillStyle = vg;
   ctx.fillRect(c - 1, 0, 2, sz);
 
-  // Bright core point — larger radius so it blends into the spike intersection
-  const core = ctx.createRadialGradient(c, c, 0, c, c, c * 0.18);
-  core.addColorStop(0.0, 'rgba(255,255,255,1.0)');
-  core.addColorStop(0.4, 'rgba(255,255,255,0.6)');
-  core.addColorStop(1.0, 'rgba(255,255,255,0)');
+  // Bright core — expanded radius covers the dark disk area of the halo PNG
+  // so small star sprites behind it don't show through as coloured particles
+  const core = ctx.createRadialGradient(c, c, 0, c, c, c * 0.52);
+  core.addColorStop(0.00, 'rgba(255,255,255,1.0)');
+  core.addColorStop(0.20, 'rgba(255,255,255,0.85)');
+  core.addColorStop(0.50, 'rgba(255,255,255,0.45)');
+  core.addColorStop(0.80, 'rgba(255,255,255,0.12)');
+  core.addColorStop(1.00, 'rgba(255,255,255,0)');
   ctx.fillStyle = core;
   ctx.fillRect(0, 0, sz, sz);
 
