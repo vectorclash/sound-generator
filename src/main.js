@@ -732,11 +732,12 @@ manualExportBtn.addEventListener('click', () => {
     // Fade to silence over the last stretch instead of a near-instant cut —
     // a 5ms ramp is enough to avoid a click, but long-decaying voices (bell,
     // harp, choir, pad) are usually still mid-tail at that point and get
-    // chopped off sharply. Tapering over ~1.2s lets them die away naturally.
+    // chopped off sharply. A short taper lets them die away naturally without
+    // turning into an audible dead-air gap at the end of the clip.
     // New notes also stop being scheduled once inside this window (see the
     // tick loop below) so nothing pops in fresh just as everything fades.
     const endAudioTime = audio.ctx.currentTime + durationSec;
-    const fadeOutSec    = Math.min(1.2, durationSec / 3);
+    const fadeOutSec    = Math.min(0.4, durationSec / 8);
     [[audio.masterGain.gain, 0.55], [audio.reverbGain.gain, 0.45]].forEach(([p, v]) => {
       p.setValueAtTime(v, endAudioTime - fadeOutSec);
       p.linearRampToValueAtTime(0, endAudioTime);
