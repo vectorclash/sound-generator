@@ -1,4 +1,4 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, lerp, midiToHz, scaleNotes } from '../../state.js';
 import { harmony } from '../harmony.js';
 
@@ -7,7 +7,8 @@ export const clavinetVoice = (() => {
   let lastMidi = -1;
 
   function play(t) {
-    const { ctx, masterGain } = audio;
+    const { ctx } = audio;
+    const masterGain = getVoiceBus('clavinet').dry;
     if (Math.random() < 0.1) return beat() * pick([0.25, 0.5]);
 
     const scale = SCALES[SCALE_NAMES[state.scaleIdx]];

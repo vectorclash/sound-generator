@@ -1,4 +1,4 @@
-import { state, rootName, scaleName, TICK_MS, SCALE_NAMES, pick } from './state.js';
+import { state, rootName, scaleName, TICK_MS, LOOKAHEAD, SCALE_NAMES, pick } from './state.js';
 import { audio, initAudio } from './audio/context.js';
 import {
   tick, pickVoices, setActiveVoices, resetTickTimer,
@@ -100,6 +100,7 @@ const exportCountdown      = document.getElementById('export-countdown');
 const exportProgressWrap   = document.getElementById('export-progress-wrap');
 const exportProgressBar    = document.getElementById('export-progress-bar');
 const clearInstrumentsBtn  = document.getElementById('clear-instruments-btn');
+const genreRandomBtn       = document.getElementById('genre-random-btn');
 const manualShareBtn       = document.getElementById('manual-share-btn');
 const modeTabs             = document.querySelectorAll('.mode-tab');
 const panelToggleBtn       = document.getElementById('panel-toggle');
@@ -229,14 +230,15 @@ function randomize() {
     if (cbElements[`drums:${sub}`]) cbElements[`drums:${sub}`].checked = true;
   }
 
-  // Simple voices: ~40% chance each, guarantee at least 2
+  // Simple voices: usually a handful, similar to infinite mode's 3–5, with
+  // an occasional (~12%) denser pull so manual can still go bigger than
+  // infinite ever does — just rarely, not as the common case.
   const simpleKeys = SIMPLE_VOICES.map(v => v.key);
-  let picked = simpleKeys.filter(() => Math.random() < 0.4);
-  if (picked.length < 2) {
-    const pool = [...simpleKeys].sort(() => Math.random() - 0.5);
-    picked = pool.slice(0, 2 + Math.floor(Math.random() * 3));
-  }
-  picked.forEach(k => {
+  const pool  = [...simpleKeys].sort(() => Math.random() - 0.5);
+  const count = Math.random() < 0.12
+    ? 6 + Math.floor(Math.random() * (simpleKeys.length - 5)) // rare: 6–20
+    : 2 + Math.floor(Math.random() * 4);                      // usual: 2–5
+  pool.slice(0, count).forEach(k => {
     manualEnabled[k] = true;
     if (cbElements[k]) cbElements[k].checked = true;
   });
@@ -250,11 +252,7 @@ function randomize() {
   updatePlayEnabled();
 }
 
-const randomBtn = document.createElement('button');
-randomBtn.className = 'genre-btn random-genre-btn';
-randomBtn.textContent = 'RANDOM';
-randomBtn.addEventListener('click', randomize);
-genreBtnsEl.appendChild(randomBtn);
+genreRandomBtn.addEventListener('click', randomize);
 
 // ─── Build instrument panel ───────────────────────────────────────────────────
 const cbElements = {}; // key → <input> — needed for exclusive-group deselection
@@ -375,13 +373,57 @@ lengthInput.addEventListener('input', () => {
 scaleSelect.addEventListener('change', clearGenreHighlight);
 rootSelect.addEventListener('change',  clearGenreHighlight);
 
+// Carry the settings infinite mode was playing into the edit panel's controls.
+// Infinite mode has already been stopped by the time this runs — this only
+// transfers the snapshot of root/scale/sliders/instruments, it doesn't resume
+// playback, since infinite's own era evolution must not keep mutating them
+// once we're in edit mode.
+function syncManualFromInfinite() {
+  clearGenreHighlight();
+
+  rootSelect.value        = state.rootMidi - 36;
+  scaleSelect.value       = state.scaleIdx;
+  bpmSlider.value         = state.tempo;
+  bpmValue.textContent    = bpmSlider.value;
+  octaveSlider.value      = state.octaveShift;
+  octaveVal.textContent   = (state.octaveShift >= 0 ? '+' : '') + state.octaveShift;
+  densitySlider.value     = state.density;
+  densityVal.textContent  = state.density.toFixed(2);
+  brightSlider.value      = state.brightness;
+  brightVal.textContent   = state.brightness.toFixed(2);
+  spaceSlider.value       = state.spaciousness;
+  spaceVal.textContent    = state.spaciousness.toFixed(2);
+  harmonySlider.value     = state.harmonyLock;
+  harmonyVal.textContent  = state.harmonyLock.toFixed(2);
+  chordSlider.value       = state.chordBeats;
+  chordVal.textContent    = state.chordBeats;
+
+  Object.keys(manualEnabled).forEach(k => {
+    manualEnabled[k] = false;
+    if (cbElements[k]) cbElements[k].checked = false;
+  });
+  const bassKey = `bass:${bassVoice.style}`;
+  manualEnabled[bassKey] = true;
+  if (cbElements[bassKey]) cbElements[bassKey].checked = true;
+  activeVoices.forEach(v => {
+    const key = v.name === 'drums' ? `drums:${v.style}` : v.name;
+    if (key in manualEnabled) {
+      manualEnabled[key] = true;
+      if (cbElements[key]) cbElements[key].checked = true;
+    }
+  });
+
+  updatePlayEnabled();
+}
+
 // ─── Mode toggle ──────────────────────────────────────────────────────────────
 modeTabs.forEach(tab => {
   tab.addEventListener('click', () => {
     const mode = tab.dataset.mode;
     if (mode === currentMode) return;
 
-    if (currentMode === 'infinite' && infiniteRunning) stopInfinite();
+    const wasInfinitePlaying = currentMode === 'infinite' && infiniteRunning;
+    if (wasInfinitePlaying) stopInfinite();
     if (currentMode === 'manual' && manualPlaying) stopManualPlayback();
 
     currentMode = mode;
@@ -391,7 +433,11 @@ modeTabs.forEach(tab => {
       panelVisible = true;
       manualUi.classList.add('active');
       panelToggleBtn.style.display = 'none';
-      if (!Object.values(manualEnabled).some(v => v)) randomize();
+      if (wasInfinitePlaying) {
+        syncManualFromInfinite();
+      } else if (!Object.values(manualEnabled).some(v => v)) {
+        randomize();
+      }
     } else {
       panelVisible = false;
       manualUi.classList.remove('active');
@@ -457,12 +503,18 @@ startBtn.addEventListener('click', async () => {
   bassVoice.reroll();
 
   // Reset tick timer and all voice schedulers so a re-start after stopping
-  // doesn't produce a stale-dt era jump or a catch-up note burst.
+  // doesn't produce a stale-dt era jump or a catch-up note burst. Voice
+  // nextTimes are seeded LOOKAHEAD into the future (not bare "now") because
+  // the first real tick() doesn't land until the first setInterval fire —
+  // seeding at "now" leaves nextTime stale by then, so the first note's
+  // attack ramp lands entirely in the past and renders as an instant pop
+  // instead of a clean fade-in.
   resetTickTimer();
   const _now = audio.ctx.currentTime;
   harmony.reset(_now);
-  bassVoice.reset(_now); drumsVoice.reset(_now);
-  SIMPLE_VOICES.forEach(({ voice }) => voice.reset(_now));
+  const _scheduleFrom = _now + LOOKAHEAD;
+  bassVoice.reset(_scheduleFrom); drumsVoice.reset(_scheduleFrom);
+  SIMPLE_VOICES.forEach(({ voice }) => voice.reset(_scheduleFrom));
 
   infiniteRunning  = true;
   infiniteInterval = setInterval(() => {
@@ -505,13 +557,21 @@ async function manualInit() {
   setActiveVoices(getManualVoices());
 
   // Reset every voice scheduler to now so stale nextTime values don't cause
-  // a catch-up burst of past-timestamped notes on the first tick.
+  // a catch-up burst of past-timestamped notes on the first tick. Voice
+  // nextTimes are seeded LOOKAHEAD into the future, not bare "now" — the
+  // first real tick() doesn't run until the first setInterval fire (TICK_MS
+  // later), so by then a "now"-seeded nextTime is already stale and the
+  // first note's attack ramp ends up scheduled entirely in the past, which
+  // renders as an instant pop instead of a clean fade-in. This is the
+  // export "instruments pop in" bug, since export always starts from a
+  // fresh manualInit().
   const now = audio.ctx.currentTime;
   harmony.reroll();
   harmony.reset(now);
-  bassVoice.reset(now);
-  drumsVoice.reset(now);
-  SIMPLE_VOICES.forEach(({ voice }) => voice.reset(now));
+  const scheduleFrom = now + LOOKAHEAD;
+  bassVoice.reset(scheduleFrom);
+  drumsVoice.reset(scheduleFrom);
+  SIMPLE_VOICES.forEach(({ voice }) => voice.reset(scheduleFrom));
 }
 
 function buildExportName(ext) {
@@ -669,16 +729,21 @@ manualExportBtn.addEventListener('click', () => {
     await manualInit();
     const skipBass = enabledBassSubtypes().length === 0;
 
-    // Schedule a 5 ms micro-ramp to silence at exactly durationSec on the
-    // audio clock — inaudible as a fade but prevents a waveform discontinuity.
+    // Fade to silence over the last stretch instead of a near-instant cut —
+    // a 5ms ramp is enough to avoid a click, but long-decaying voices (bell,
+    // harp, choir, pad) are usually still mid-tail at that point and get
+    // chopped off sharply. Tapering over ~1.2s lets them die away naturally.
+    // New notes also stop being scheduled once inside this window (see the
+    // tick loop below) so nothing pops in fresh just as everything fades.
     const endAudioTime = audio.ctx.currentTime + durationSec;
+    const fadeOutSec    = Math.min(1.2, durationSec / 3);
     [[audio.masterGain.gain, 0.55], [audio.reverbGain.gain, 0.45]].forEach(([p, v]) => {
-      p.setValueAtTime(v, endAudioTime - 0.005);
+      p.setValueAtTime(v, endAudioTime - fadeOutSec);
       p.linearRampToValueAtTime(0, endAudioTime);
     });
 
     const dest    = audio.ctx.createMediaStreamDestination();
-    audio.masterGain.connect(dest);
+    audio.masterOut.connect(dest);
     const chunks  = [];
     const mtype   = ['audio/webm;codecs=opus', 'audio/webm', ''].find(t => !t || MediaRecorder.isTypeSupported(t));
     const recorder = mtype ? new MediaRecorder(dest.stream, { mimeType: mtype }) : new MediaRecorder(dest.stream);
@@ -686,7 +751,7 @@ manualExportBtn.addEventListener('click', () => {
 
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = () => {
-      audio.masterGain.disconnect(dest);
+      audio.masterOut.disconnect(dest);
       currentRecorder = null;
       resetExportUI();
 
@@ -736,10 +801,8 @@ manualExportBtn.addEventListener('click', () => {
 
       const remaining = durationSec - (Date.now() - recStart) / 1000;
 
-      if (remaining > 0) {
-        tick({ skipBass, skipEvolve: true });
-        manualStatus.textContent = `REC  ${Math.ceil(remaining)}s`;
-      }
+      if (remaining > fadeOutSec) tick({ skipBass, skipEvolve: true });
+      if (remaining > 0) manualStatus.textContent = `REC  ${Math.ceil(remaining)}s`;
 
       if (remaining <= 0) {
         clearInterval(manualInterval); manualInterval = null;

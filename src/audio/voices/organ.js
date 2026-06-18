@@ -1,4 +1,4 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
 import { harmony } from '../harmony.js';
 
@@ -9,7 +9,8 @@ export const organVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
-    const { ctx, masterGain } = audio;
+    const { ctx } = audio;
+    const masterGain = getVoiceBus('organ').dry;
     const chord  = harmony.chordMidis(state.rootBase + 24, 3);
     const dur    = beat() * pick([2, 3, 4]);
 

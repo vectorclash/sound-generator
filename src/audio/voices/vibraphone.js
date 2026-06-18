@@ -1,4 +1,4 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
 import { harmony } from '../harmony.js';
 
@@ -7,7 +7,8 @@ export const vibraphoneVoice = (() => {
   let lastMidi = -1;
 
   function play(t) {
-    const { ctx, masterGain, reverbNode } = audio;
+    const { ctx, reverbNode } = audio;
+    const masterGain = getVoiceBus('vibraphone').dry;
     if (Math.random() < 0.15) return beat() * pick([0.5, 1]);
 
     const scale = SCALES[SCALE_NAMES[state.scaleIdx]];

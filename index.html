@@ -221,6 +221,39 @@
       pointer-events: all;
       transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s, background-color 0.3s ease, border-color 0.3s ease;
     }
+    /* ─── Short-viewport overrides (landscape phones) ───────────────────────
+       #manual-ui is normally centered via translate(-50%, -50%). Centering
+       a height-capped box wastes a symmetric margin top *and* bottom — on a
+       tall portrait screen that's a trivial amount, but on a short landscape
+       phone (~350-430px tall) it eats a third or more of the viewport as
+       blank space before any content even starts, leaving almost nothing
+       visible without scrolling.
+       Fix: stop centering vertically here. Anchor the panel's top edge just
+       below the fixed #mode-tabs (~60px tall + clearance ≈ 76px) and let it
+       run down to near the bottom edge instead, reclaiming that space for
+       content. top:50% is left untouched (only transform's Y changes) so
+       this still composes with the existing opacity/transform transition —
+       see the translate(-50%, calc(76px - 50vh)) trick below: top:50% puts
+       the box's reference point at 50vh, and this translateY cancels that
+       back down to a flat 76px from the real viewport top, regardless of
+       viewport height.
+       This block must stay positioned between the unconditional .active and
+       .collapsed rules below: its #manual-ui.active selector ties in
+       specificity with both of them, so when collapsed+active are both set
+       (the collapsed/pill state), source order is the tiebreaker — placing
+       it here means the later .collapsed rule still wins and slides the
+       pill down, while it still wins over the earlier plain .active rule
+       when only .active is set (the normal open state). Moving this block
+       elsewhere will silently break one of those two cases. */
+    @media (max-height: 480px) {
+      #manual-ui {
+        max-height: calc(100dvh - 92px);
+        transform: translate(-50%, calc(76px - 50vh - 16px)) scale(0.97);
+      }
+      #manual-ui.active {
+        transform: translate(-50%, calc(76px - 50vh)) scale(1);
+      }
+    }
     /* Collapsed: shrink to a pill around the hide/show button and slide it
        down to rest above the bottom edge of the viewport. The panel's own
        width/height never change here -- only its background/border fade
@@ -478,7 +511,6 @@
     }
     .genre-btn:hover { border-color: #6a8aaa; color: #aabece; }
     .genre-btn.active { border-color: #7a9fc0; color: #ccdde8; background: rgba(100,150,200,0.1); }
-    .random-genre-btn { border-style: dashed; }
 
     /* root / scale dropdowns */
     .ctrl-select {
@@ -692,17 +724,6 @@
       }
     }
 
-    /* ─── Short-viewport overrides (landscape phones) ───────────────────────
-       #manual-ui is centered on the viewport via translate(-50%, -50%); on
-       short viewports that centered position can land underneath the fixed
-       #mode-tabs. Capping the panel's height keeps its centered top edge
-       below the tab bar. */
-    @media (max-height: 480px) {
-      #manual-ui {
-        max-height: calc(100dvh - 150px);
-      }
-    }
-
     #panel-hide-btn {
       display: block;
       flex-shrink: 0;
@@ -713,7 +734,7 @@
       color: #4a5a6a;
       font-family: inherit;
       font-size: 9px;
-      padding: calc(var(--pad) - 8px) 0 12px;
+      padding: clamp(12px, calc(var(--pad) - 8px), 18px) 0 12px;
       cursor: pointer;
       letter-spacing: 3px;
       text-transform: uppercase;
@@ -757,7 +778,7 @@
     <!-- Mode tabs -->
     <div id="mode-tabs">
       <button class="mode-tab active" data-mode="infinite">INFINITE</button>
-      <button class="mode-tab" data-mode="manual">MANUAL</button>
+      <button class="mode-tab" data-mode="manual">EDIT</button>
     </div>
     <button id="panel-toggle">SHOW</button>
 
@@ -774,10 +795,13 @@
 
       <div id="manual-ui-scroll">
       <!-- Genre presets -->
-      <div class="collapsible-section" id="section-genre">
+      <div class="collapsible-section collapsed" id="section-genre">
         <div class="section-header">
           <span class="section-label">GENRE</span>
-          <span class="section-chevron"></span>
+          <div class="section-header-right">
+            <button class="clear-btn" id="genre-random-btn">RANDOM</button>
+            <span class="section-chevron"></span>
+          </div>
         </div>
         <div class="section-body">
           <div class="ctrl-row" style="margin-bottom:12px">

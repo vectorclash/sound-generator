@@ -1,4 +1,4 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, LOOKAHEAD, beat, rand, pick, lerp, midiToHz } from '../../state.js';
 import { harmony } from '../harmony.js';
 
@@ -6,7 +6,8 @@ export const choirVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
-    const { ctx, masterGain, reverbNode } = audio;
+    const { ctx, reverbNode } = audio;
+    const masterGain = getVoiceBus('choir').dry;
     const chord  = harmony.chordMidis(state.rootBase + 24, 3);
     const dur    = beat() * pick([6, 8, 10]);
     const gain   = rand(0.06, 0.10);

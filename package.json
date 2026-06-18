@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "esbuild --servedir=. --serve=8000",
+    "dev": "node scripts/dev.js",
     "build": "node scripts/build.js"
   },
   "devDependencies": {

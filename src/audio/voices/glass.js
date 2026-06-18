@@ -1,4 +1,4 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
 import { harmony } from '../harmony.js';
 
@@ -6,7 +6,8 @@ export const glassVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
-    const { ctx, masterGain, reverbNode } = audio;
+    const { ctx, reverbNode } = audio;
+    const masterGain = getVoiceBus('glass').dry;
     const wait = beat() * rand(2, 5);
     if (Math.random() < 0.35) return wait;
 

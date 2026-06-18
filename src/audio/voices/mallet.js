@@ -1,4 +1,4 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
 import { harmony } from '../harmony.js';
 
@@ -6,7 +6,8 @@ export const malletVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
-    const { ctx, masterGain, reverbNode } = audio;
+    const { ctx, reverbNode } = audio;
+    const masterGain = getVoiceBus('mallet').dry;
     if (Math.random() < 0.2) return beat() * pick([0.5, 1]);
 
     const notes = scaleNotes(state.rootBase + 24, SCALES[SCALE_NAMES[state.scaleIdx]], 3);

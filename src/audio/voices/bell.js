@@ -1,4 +1,4 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
 import { harmony } from '../harmony.js';
 
@@ -6,7 +6,8 @@ export const bellVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
-    const { ctx, masterGain, reverbNode } = audio;
+    const { ctx, reverbNode } = audio;
+    const masterGain = getVoiceBus('bell').dry;
     const wait = beat() * pick([2, 3, 4, 4]);
     if (Math.random() < 0.3) return wait;
 

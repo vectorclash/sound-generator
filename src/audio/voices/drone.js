@@ -1,11 +1,12 @@
-import { audio } from '../context.js';
+import { audio, getVoiceBus } from '../context.js';
 import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, lerp, midiToHz } from '../../state.js';
 
 export const droneVoice = (() => {
   let nextTime = 0;
 
   function play(t) {
-    const { ctx, masterGain, reverbNode } = audio;
+    const { ctx, reverbNode } = audio;
+    const masterGain = getVoiceBus('drone').dry;
     const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
     const notes = [state.rootBase + 12, state.rootBase + 12 + scale[4]]; // root + fifth
     const dur   = beat() * pick([8, 12, 16]);
