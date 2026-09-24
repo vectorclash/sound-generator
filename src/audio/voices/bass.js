@@ -1,6 +1,7 @@
 import { audio, noise } from '../context.js';
 import { state, beat, rand, pick, currentScale, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { harmony, bassRoot } from '../harmony.js';
 import { osc, gain, filter, perc, ahr, pluckBuffer, playBuffer } from '../synth.js';
 
@@ -93,6 +94,7 @@ function walkNote(b) {
 
 // ─── Sounds ───────────────────────────────────────────────────────────────────
 function subBass(t, midi, dur) {
+  logNote('bass', t, midi, dur, 0.8);
   const hz = midiToHz(midi), end = t + dur + 0.1;
   const lp = filter('lowpass', 320, 0.7);
   osc('sine', hz, t, end).connect(lp);
@@ -108,6 +110,7 @@ function subBass(t, midi, dur) {
 }
 
 function stringBass(t, midi, dur, { bright, pick: pos, t60, level }) {
+  logNote('bass', t, midi, dur, 0.85);
   const src = playBuffer(pluckBuffer(midi, { t60, bright, pick: pos, stretch: 0.5, length: Math.min(t60, dur + 0.2) }), t, t + dur + 0.2);
   const lp = filter('lowpass', 1800, 0.7);
   const env = gain(0);
@@ -122,6 +125,7 @@ function stringBass(t, midi, dur, { bright, pick: pos, t60, level }) {
 }
 
 function synthBass(t, midi, dur) {
+  logNote('bass', t, midi, dur, 0.85);
   const hz = midiToHz(midi), end = t + dur + 0.1;
   const peak = rand(0.085, 0.11);
   for (const detune of [-8, 8]) {
@@ -139,6 +143,7 @@ function synthBass(t, midi, dur) {
 }
 
 function rumbleBass(t, midi, dur) {
+  logNote('bass', t, midi, dur, 0.7);
   const hz = midiToHz(midi), end = t + dur + 0.6;
   const peak = rand(0.07, 0.09);
   const lp = filter('lowpass', 300, 1.5);

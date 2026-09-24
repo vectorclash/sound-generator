@@ -1,6 +1,7 @@
 import { audio, getVoiceBus } from '../context.js';
 import { state, beat, pick, lerp, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { harmony } from '../harmony.js';
 import { osc, gain, filter, send } from '../synth.js';
 
@@ -42,6 +43,7 @@ function play(t, b) {
   const gate  = rate * beat() * 0.85;
   const vel   = step % 4 === 0 ? 1 : 0.78;
   const peak  = 0.1 * vel;
+  logNote('arpeggio', t, midi, gate, vel);
 
   const lp = filter('lowpass', 300, 3.5);
   const top = lerp(1600, 5200, state.brightness) * (0.7 + 0.3 * vel);

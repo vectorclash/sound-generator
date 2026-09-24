@@ -1,5 +1,7 @@
 import { scene, camera, renderer, clock } from './scene.js';
 import { updateShapes } from './shapes.js';
+import { updateMusic } from './music.js';
+import { updateHalo } from './halo.js';
 import { updateStars } from './stars.js';
 import { updateNebulae } from './nebula.js';
 import { audio } from '../audio/context.js';
@@ -17,6 +19,7 @@ function animate(timestamp) {
   clock.update(timestamp);
 
   const t   = clock.getElapsed();
+  const dt  = Math.min(0.1, clock.getDelta());
   // Each key keeps its colour: pitch class × 15°, offset so the palette
   // matches what the keys looked like before pitches moved to standard MIDI.
   const hue = ((state.rootMidi % 12) * 15 + 180 + state.era * 40) % 360;
@@ -43,8 +46,11 @@ function animate(timestamp) {
   }
 
   // Always update shapes and stars — idle energy=0 keeps everything at rest
-  // but still visible and gently moving
-  updateShapes(freqData, energy, bass, hue);
+  // but still visible and gently moving. The halo and sphere follow the notes
+  // themselves; the space scene keeps its spectrum-driven energy/bass.
+  updateMusic(dt);
+  updateShapes({ freqData, energy, hue, dt, fade });
+  updateHalo({ hue, dt, t });
   updateStars(energy, bass, hue, t);
   updateNebulae(energy, bass, hue, t);
 

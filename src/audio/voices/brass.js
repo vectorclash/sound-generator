@@ -1,6 +1,7 @@
 import { audio, getVoiceBus } from '../context.js';
 import { state, beat, rand, lerp, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { harmony } from '../harmony.js';
 import { osc, gain, filter, send, lfo } from '../synth.js';
@@ -17,6 +18,7 @@ function horn(t, midi, dur, vel, level) {
   const hz  = midiToHz(midi);
   const end = t + dur + 0.4;
   const peak = level * vel;
+  logNote('brass', t, midi, dur, vel);
 
   const lp = filter('lowpass', hz * 1.2, 1.3);
   const open = hz * lerp(3.5, 7, vel * (0.4 + 0.6 * state.brightness));

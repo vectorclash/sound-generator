@@ -1,6 +1,7 @@
 import { getVoiceBus } from '../context.js';
 import { state, beat, lerp, register } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { harmony } from '../harmony.js';
 import { gain, filter, pluckBuffer, playBuffer } from '../synth.js';
@@ -13,6 +14,7 @@ import { gain, filter, pluckBuffer, playBuffer } from '../synth.js';
 const phraser = createPhraser({ name: 'clavinet', base: () => register(24, 48, 60), style: 'active', ostinato: true, repeat: 0.85 });
 
 function strike(t, midi, gate, vel) {
+  logNote('clavinet', t, midi, gate, vel);
   const src = playBuffer(pluckBuffer(midi, { t60: 1.1, bright: 1, pick: 0.06, stretch: 0.2, length: gate + 0.1 }), t, t + gate + 0.1);
   const lp = filter('lowpass', 800, 5);
   lp.frequency.setValueAtTime(lerp(2400, 5200, state.brightness), t);

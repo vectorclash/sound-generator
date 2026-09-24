@@ -1,6 +1,7 @@
 import { audio, getVoiceBus } from '../context.js';
 import { state, beat, rand, lerp, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { osc, gain, send, lfo } from '../synth.js';
 
@@ -17,6 +18,7 @@ function play(t, b) {
   const dur  = ev.dur * beat();
   const peak = 0.15 * ev.vel * lerp(0.6, 1.0, state.density);
   const end  = t + dur + 0.5;
+  logNote('melody', t, ev.midi, dur, ev.vel);
 
   const env = gain(0);
   env.gain.setValueAtTime(0, t);

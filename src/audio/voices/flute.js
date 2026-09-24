@@ -1,6 +1,7 @@
 import { audio, getVoiceBus, noise } from '../context.js';
 import { beat, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { osc, gain, filter, send, lfo, perc } from '../synth.js';
 
@@ -21,6 +22,7 @@ function play(t, b) {
   const peak = 0.12 * ev.vel;
   const end  = t + dur + 0.4;
   const high = hz > 700;
+  logNote('flute', t, ev.midi, dur, ev.vel);
 
   const env = gain(0);
   env.gain.setValueAtTime(0, t);

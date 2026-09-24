@@ -1,6 +1,7 @@
 import { audio, getVoiceBus } from '../context.js';
 import { beat, rand, pick, register, midiToHz, currentScale } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { harmony } from '../harmony.js';
 import { osc, gain, send, perc } from '../synth.js';
 
@@ -52,6 +53,7 @@ function strike(t, b, lenBeats) {
   }
   const v = harmony.voice(pcs, prev, register(12, 55, 66));
   prev = v;
+  for (const m of v) logNote('rhodes', t, m, lenBeats * beat(), 0.75);
 
   const bus = getVoiceBus('rhodes').dry;
   const pan = audio.ctx.createStereoPanner();

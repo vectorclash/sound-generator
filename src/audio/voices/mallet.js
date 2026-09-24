@@ -1,6 +1,7 @@
 import { audio, getVoiceBus, noise } from '../context.js';
 import { clamp, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { osc, gain, filter, send, perc } from '../synth.js';
 
@@ -18,6 +19,7 @@ function play(t, b) {
   const hz    = midiToHz(ev.midi);
   const peak  = 0.32 * ev.vel;
   const decay = clamp(0.4 * Math.pow(400 / hz, 0.6), 0.18, 1.4);
+  logNote('mallet', t, ev.midi, decay, ev.vel);
 
   const out = gain(1);
   for (const [ratio, level, d] of [[1, 1, 1], [3.93, 0.2, 0.22], [9.4, 0.05, 0.07]]) {

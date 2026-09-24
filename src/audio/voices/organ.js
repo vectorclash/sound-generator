@@ -1,6 +1,7 @@
 import { audio, getVoiceBus, noise } from '../context.js';
 import { beat, rand, pick, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { harmony } from '../harmony.js';
 import { osc, gain, filter, send, perc } from '../synth.js';
 
@@ -29,6 +30,7 @@ function play(t, b) {
   const pcs  = harmony.pcs(seg.degree, seg.seventh ? 4 : 3);
   const v    = harmony.voice(pcs, prev, register(16, 52, 68));
   prev = v;
+  for (const m of v) logNote('organ', t, m, dur, 0.6);
 
   const bus  = getVoiceBus('organ').dry;
   const end  = t + dur + 0.1;

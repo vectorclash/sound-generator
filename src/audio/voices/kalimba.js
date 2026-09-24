@@ -1,6 +1,7 @@
 import { audio, getVoiceBus, noise } from '../context.js';
 import { rand, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { harmony } from '../harmony.js';
 import { osc, gain, filter, send, perc } from '../synth.js';
@@ -17,6 +18,7 @@ function tine(t, midi, vel) {
   const hz   = midiToHz(midi);
   const peak = 0.14 * vel;
   const decay = rand(0.9, 1.4);
+  logNote('kalimba', t, midi, decay, vel);
   const o = osc('sine', hz, t, t + decay + 0.05), e = gain(0);
   perc(e.gain, t, peak, decay);
   const o2 = osc('sine', hz * 6.1, t, t + 0.12), e2 = gain(0);

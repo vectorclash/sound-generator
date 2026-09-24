@@ -1,6 +1,7 @@
 import { audio, getVoiceBus, noise } from '../context.js';
 import { beat, pick, clamp, register, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { osc, gain, filter, send, lfo, perc } from '../synth.js';
 
@@ -21,6 +22,7 @@ function play(t, b) {
   const ring = clamp(ev.dur * beat() * 1.6 + 0.8, 1, 4.5 * Math.sqrt(300 / hz));
   const peak = 0.22 * ev.vel;
   const end  = t + ring + 0.05;
+  logNote('vibraphone', t, ev.midi, ring, ev.vel);
 
   const trem = gain(1);
   if (motor) lfo(motor, 0.22, t, end).connect(trem.gain);

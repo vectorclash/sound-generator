@@ -1,6 +1,7 @@
 import { audio, getVoiceBus, noise } from '../context.js';
 import { currentScale, rand, pick, register, midiToHz, scaleNotes } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { harmony } from '../harmony.js';
 import { osc, gain, filter, send, perc } from '../synth.js';
 
@@ -20,8 +21,10 @@ function play(t, b) {
   if (Math.random() < 0.3) return wait;
 
   const notes = scaleNotes(register(36, 64, 80), currentScale(), 2);
-  const hz    = midiToHz(harmony.pickChordTone(notes, b));
+  const midi  = harmony.pickChordTone(notes, b);
+  const hz    = midiToHz(midi);
   const dur   = rand(2.5, 5.0);
+  logNote('bell', t, midi, dur, 0.7);
   const peak  = rand(0.07, 0.11);
   const bus   = getVoiceBus('bell').dry;
   const out   = gain(1);

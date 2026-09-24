@@ -1,6 +1,7 @@
 import { audio, getVoiceBus } from '../context.js';
 import { state, beat, rand, pick, lerp, register, midiToHz } from '../../state.js';
 import { createVoice, transport } from '../transport.js';
+import { logNote } from '../notes.js';
 import { osc, gain, filter, send, lfo, ahr } from '../synth.js';
 
 // Tonic pedal: root and perfect fifth, sustained under the progression.
@@ -17,6 +18,8 @@ function play(t, b) {
   const bus  = getVoiceBus('drone').dry;
   const peak = rand(0.07, 0.1);
   const end  = t + dur + 2.6;
+  logNote('drone', t, root, dur, 0.6);
+  logNote('drone', t, root + 7, dur, 0.5);
 
   const cutoff = lerp(200, 900, state.brightness);
   const lp = filter('lowpass', cutoff, 0.9);

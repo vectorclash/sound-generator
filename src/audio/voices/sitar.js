@@ -1,6 +1,7 @@
 import { audio, getVoiceBus } from '../context.js';
 import { state, beat, rand, register, fold, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logNote } from '../notes.js';
 import { createPhraser } from '../phrase.js';
 import { osc, gain, filter, send, shaper, pluckBuffer, playBuffer } from '../synth.js';
 
@@ -22,6 +23,7 @@ function play(t, b) {
   const dur  = ev.dur * beat();
   const ring = Math.min(3, dur + 1.6);
   const peak = 0.6 * ev.vel;
+  logNote('sitar', t, midi, dur, ev.vel);
 
   const src = playBuffer(pluckBuffer(midi, { t60: 2.8, bright: 0.85, pick: 0.07, stretch: 0.35, length: ring }), t, t + ring);
   if (prev !== null && prev !== midi && Math.abs(prev - midi) <= 4 && Math.random() < 0.55) {

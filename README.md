@@ -224,15 +224,30 @@ An era change waits for the next **chord change**. Every voice schedules up to t
 
 ## Visual Engine
 
-Rendered with [Three.js r175](https://threejs.org/) via WebGL at native pixel ratio. Animation loop runs via `requestAnimationFrame`.
+Rendered with [Three.js r183](https://threejs.org/) via WebGL at native pixel ratio. Animation loop runs via `requestAnimationFrame`.
 
 ### Scene objects
 
-**Wireframe icosahedron** — subdivision level 5 (5,120 faces). Each vertex is displaced radially by `1.5 + freqData[bin]/255 × 1.1 + bass × 0.5`. Frequency bins map to vertices via XZ angle and Y component, so different faces warp to different parts of the spectrum. Self-rotates, accelerating with audio energy.
+The ring and the central sphere are driven by the **music itself** rather than the spectrum. Every voice logs each note (pitch, voice, velocity, length) and every drum hit as the scheduler commits it (`src/audio/notes.js`); `src/visuals/music.js` plays that log back in step with what is reaching the speakers — audio clock minus the output latency, so it stays in sync even over Bluetooth. (The old 64-bar spectrum ring put every note the engine plays into 5 bars and left 37 bars above 5 kHz dark most of the time.)
 
-**Inner glow sphere** — `AdditiveBlending`, opacity and scale pulse with bass energy.
+Pitch is laid out on the **circle of fifths** (C, G, D, A, E, B, F♯ …) around the scene. That puts a key's scale in one unbroken arc and a chord's tones next to each other, so harmony reads as a shape. Each pitch class has a colour: the tonic takes the palette hue and every fifth turns 30°.
 
-**Frequency bar ring** — 64 rectangular bars in a circle of radius 3.2. Each bar maps to an FFT bin; height scales 0.04–3.54×. Colours cycle around the hue wheel with additive blending.
+**Harmonic halo** (`src/visuals/halo.js`) — a planetary ring of 16,000 dust particles around the sphere, animated entirely in a vertex shader:
+
+| Dimension | Meaning |
+|---|---|
+| Angle | Pitch class, on the circle of fifths |
+| Ringlet | Octave — seven concentric bands (C1 innermost … C7 outermost) with gaps between them |
+| Glow | The key's scale glows as a coloured arc that swings round when the key changes; chord tones brighter |
+| Plume | A sounding note lights its patch of dust, which lifts off the plane into a sparkling plume following the note's envelope; the onset throws a brief burst outward |
+
+The dust orbits with Keplerian shear (inner ringlets faster), so it streams through the lit regions, which stay fixed in space.
+
+**Chord constellation** — a ring-shaped star on each tone of the current chord, joined by dotted lines of light with pulses travelling along them. On the circle of fifths a major and a minor triad are mirror-image triangles and a seventh chord is a quadrilateral, so the harmony is a visible shape; the corners glide to the next chord's tones on each change, and a corner flares when its note is actually sounding.
+
+**Harmonic sphere** — five nested wireframe icosahedra (vertices merged, so each of 362 points per layer is computed once), each listening to part of the band: bass (inner), motion, lead and air (outer). The whole shape bulges toward the current chord's pitch classes — the same directions as the lit halo sectors and the constellation — and morphs when the chord changes. Each note onset sends a ripple across its layer from the note's direction on the halo (high notes start near the top); the kick punches the inner layers and the snare the outer ones; a faint shimmer from a log-spaced spectrum keeps the surface alive. Each layer is coloured by one chord tone. Self-rotates, faster with audio energy.
+
+**Inner glow sphere** — `AdditiveBlending`, coloured by the chord root, swells with the bass line and the kick.
 
 **Star field** — 7,500 small point stars and 80 large sprite stars, placed using 3D value noise rejection sampling for organic clustering. Each star stores cylindrical coordinates and is animated every frame by a three-component aperiodic flow field using irrational-ratio frequencies (φ, √2, √3) so the motion never visibly repeats.
 
@@ -280,9 +295,11 @@ requestAnimationFrame
   └─ animate()
        ├─ analyser.getByteFrequencyData() → freqData[]
        ├─ fade-in ramp (0→1 over 2.5 s)  → energy, bass scaled on play start
-       ├─ deform icosahedron vertices     ← freqData
-       ├─ pulse inner glow                ← bass
-       ├─ scale frequency bars            ← freqData
+       ├─ read the note log               → note envelopes, hits, chord, key (at heard time)
+       ├─ halo dust (shader uniforms)     ← note envelopes, onsets, key, chord
+       ├─ chord constellation             ← chord tones, their note levels
+       ├─ sphere: chord lobes + ripples   ← chord, note onsets, kick/snare, log spectrum
+       ├─ inner glow                      ← chord root, bass line, kick
        ├─ update 7500 star vertex colours ← hue, per-star personality
        ├─ update 7500 star positions      ← t, energy, bass (flow field)
        ├─ update 80 large star sprites    ← hue, energy, bass

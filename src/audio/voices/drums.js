@@ -1,6 +1,7 @@
 import { audio, getVoiceBus, noise } from '../context.js';
 import { state, beat, rand, pick, fold, midiToHz } from '../../state.js';
 import { createVoice } from '../transport.js';
+import { logHit } from '../notes.js';
 import { osc, gain, filter, send, perc, shaper } from '../synth.js';
 
 // ─── Kit ──────────────────────────────────────────────────────────────────────
@@ -355,10 +356,14 @@ function play(t, b) {
     if (p.human) { at += rand(-0.004, 0.004); v *= rand(0.9, 1.07); }
     if (track === 'hat' && rollSteps.has(i)) {
       const n = pick([2, 3, 4]);
-      for (let r = 0; r < n; r++) fn(at + r * stepSec / n, level * scale * v * (0.6 + 0.4 * r / n));
+      for (let r = 0; r < n; r++) {
+        fn(at + r * stepSec / n, level * scale * v * (0.6 + 0.4 * r / n));
+        logHit(track, at + r * stepSec / n, v * 0.6);
+      }
       continue;
     }
     fn(Math.max(t, at), level * scale * v);
+    logHit(track, Math.max(t, at), Math.min(1, v));
   }
 
   return bar * 4 + (i + 1) * unit - b; // re-snap to the exact grid every step
