@@ -1,64 +1,62 @@
-import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
-import { harmony } from '../harmony.js';
+import { audio, getVoiceBus, noise } from '../context.js';
+import { beat, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
+import { osc, gain, filter, send, lfo, perc } from '../synth.js';
 
-export const fluteVoice = (() => {
-  let nextTime = 0;
+// Flute: a nearly sinusoidal tone with weak 2nd/3rd harmonics (they thin out
+// in the upper register), breath noise that runs through the whole note — not
+// just the attack — and vibrato that is partly pitch, partly amplitude, eased
+// in after the note has spoken. The attack starts slightly flat and settles,
+// as a flute's pitch does while the air column locks in.
+const phraser = createPhraser({ name: 'flute', base: () => register(36, 60, 74), lead: true });
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('flute').dry;
-    if (Math.random() < 0.2) return beat() * pick([1, 1, 2]);
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
 
-    const notes = scaleNotes(state.rootBase + 36, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
-    const hz   = midiToHz(harmony.pickChordTone(notes));
-    const dur  = beat() * pick([1, 1.5, 2, 3]);
-    const gain = rand(0.06, 0.11);
+  const bus  = getVoiceBus('flute').dry;
+  const hz   = midiToHz(ev.midi);
+  const dur  = ev.dur * beat();
+  const peak = 0.12 * ev.vel;
+  const end  = t + dur + 0.4;
+  const high = hz > 700;
 
-    const osc = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
-    osc.type = 'sine'; osc.frequency.value = hz;
+  const env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(peak, t + 0.07);
+  env.gain.setTargetAtTime(0, t + dur, 0.06);
 
-    // Vibrato: pitch modulation with delayed onset — flute players add vibrato after the attack
-    const lfo = ctx.createOscillator(), lfoGain = ctx.createGain();
-    lfo.type = 'sine'; lfo.frequency.value = rand(4.8, 6.2);
-    lfoGain.gain.setValueAtTime(0, t);
-    lfoGain.gain.linearRampToValueAtTime(0, t + 0.28);
-    lfoGain.gain.linearRampToValueAtTime(hz * 0.007, t + 0.55); // ~12 cents depth
-    lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+  const trem = gain(1);
+  lfo(5.1, 0.07, t, end, 0.3, 0.35).connect(trem.gain);
+  const vib = lfo(5.1, 13, t, end, 0.3, 0.35);
 
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(gain, t + 0.08);
-    env.gain.setValueAtTime(gain, t + dur - 0.12);
-    env.gain.linearRampToValueAtTime(0, t + dur);
-    wet.gain.value = 0.55;
-    osc.connect(env); env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-    osc.start(t); osc.stop(t + dur + 0.05);
-    lfo.start(t); lfo.stop(t + dur + 0.05);
-
-    // Breath transient: highpass-filtered noise on the attack gives the characteristic air
-    const bLen  = Math.ceil(ctx.sampleRate * 0.16);
-    const bBuf  = ctx.createBuffer(1, bLen, ctx.sampleRate);
-    const bData = bBuf.getChannelData(0);
-    for (let i = 0; i < bLen; i++) bData[i] = Math.random() * 2 - 1;
-    const bSrc = ctx.createBufferSource(); bSrc.buffer = bBuf;
-    const bhp  = ctx.createBiquadFilter(); bhp.type = 'highpass'; bhp.frequency.value = hz * 2.2;
-    const bEnv = ctx.createGain();
-    bEnv.gain.setValueAtTime(gain * 0.20, t);
-    bEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
-    bSrc.connect(bhp); bhp.connect(bEnv); bEnv.connect(masterGain);
-    bSrc.start(t); bSrc.stop(t + 0.17);
-
-    return beat() * pick([1, 1, 1.5, 2]);
+  for (const [n, level] of [[1, 1], [2, high ? 0.12 : 0.25], [3, high ? 0.03 : 0.07]]) {
+    const o = osc('sine', hz * n, t, end);
+    o.detune.setValueAtTime(-14, t);
+    o.detune.linearRampToValueAtTime(0, t + 0.07);
+    vib.connect(o.detune);
+    const g = gain(level);
+    o.connect(g); g.connect(trem);
   }
+  trem.connect(env);
 
-  return {
-    name: 'flute',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+  // Breath: noise band-passed around the note, under the tone for its length…
+  const air = noise(t, dur + 0.4);
+  const airBp = filter('bandpass', hz, 3.5);
+  const airG = gain(0.35);
+  air.connect(airBp); airBp.connect(airG); airG.connect(env);
+
+  // …plus a brief breathy "chiff" as the note starts.
+  const chiff = noise(t, 0.12);
+  const chiffHp = filter('highpass', hz * 2.2);
+  const chiffEnv = gain(0);
+  perc(chiffEnv.gain, t, peak * 0.22, 0.09, 0.01);
+  chiff.connect(chiffHp); chiffHp.connect(chiffEnv); chiffEnv.connect(bus);
+
+  env.connect(bus);
+  send(env, audio.reverbSend, 0.55);
+  return ev.gap;
+}
+
+export const fluteVoice = createVoice('flute', play, { entry: 4, role: 'lead', onReset: phraser.reset });

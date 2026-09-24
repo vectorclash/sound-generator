@@ -1,48 +1,49 @@
-import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { audio, getVoiceBus, noise } from '../context.js';
+import { currentScale, rand, pick, register, midiToHz, scaleNotes } from '../../state.js';
+import { createVoice } from '../transport.js';
 import { harmony } from '../harmony.js';
+import { osc, gain, filter, send, perc } from '../synth.js';
 
-export const bellVoice = (() => {
-  let nextTime = 0;
+// Handbell. The old partials (1, 2.756, 5.404, 8.801) are those of an untuned
+// bar — a glockenspiel — and the loud 2.756× partial rang a quarter-tone off
+// every chord for seconds. Handbells are tuned so the strong partials are
+// the fundamental, octave and twelfth (1, 2, 3); only faint, fast-decaying
+// upper partials are inharmonic, which keeps the "bell" without the clash.
+// A second fundamental a fraction of a hertz away gives the slow warble of a
+// real bell's split modes.
+const PARTIALS = [ // ratio, level, decay (× note length)
+  [1, 1, 1], [2, 0.3, 0.55], [3, 0.35, 0.4], [4.2, 0.1, 0.16], [5.4, 0.06, 0.1],
+];
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('bell').dry;
-    const wait = beat() * pick([2, 3, 4, 4]);
-    if (Math.random() < 0.3) return wait;
+function play(t, b) {
+  const wait = pick([2, 3, 4, 4]);
+  if (Math.random() < 0.3) return wait;
 
-    const notes = scaleNotes(state.rootBase + 36, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
-    const hz   = midiToHz(harmony.pickChordTone(notes));
-    const dur  = rand(2.5, 5.0);
-    const gain = rand(0.07, 0.12);
+  const notes = scaleNotes(register(36, 64, 80), currentScale(), 2);
+  const hz    = midiToHz(harmony.pickChordTone(notes, b));
+  const dur   = rand(2.5, 5.0);
+  const peak  = rand(0.07, 0.11);
+  const bus   = getVoiceBus('bell').dry;
+  const out   = gain(1);
 
-    // Four inharmonic partials — each with its own decay rate (higher partials die faster)
-    for (const [ratio, relGain, decayMul] of [
-      [1,     1.00, 1.00],
-      [2.756, 0.35, 0.55],
-      [5.404, 0.16, 0.25],
-      [8.801, 0.07, 0.11],
-    ]) {
-      const osc = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
-      osc.type = 'sine'; osc.frequency.value = hz * ratio;
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain * relGain, t + 0.005);
-      env.gain.exponentialRampToValueAtTime(0.001, t + dur * decayMul);
-      wet.gain.value = 0.7;
-      osc.connect(env); env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-      osc.start(t); osc.stop(t + dur + 0.1);
-    }
-    return wait;
+  for (const [ratio, level, decay] of PARTIALS) {
+    if (hz * ratio > 16000) continue;
+    const o = osc('sine', hz * ratio, t, t + dur * decay + 0.05), e = gain(0);
+    perc(e.gain, t, peak * level, dur * decay, 0.003);
+    o.connect(e); e.connect(out);
   }
+  const warble = osc('sine', hz + rand(0.6, 1.4), t, t + dur * 0.9), we = gain(0);
+  perc(we.gain, t, peak * 0.45, dur * 0.85, 0.003);
+  warble.connect(we); we.connect(out);
 
-  return {
-    name: 'bell',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+  const strike = noise(t, 0.01), sHp = filter('highpass', 5000), sE = gain(0);
+  perc(sE.gain, t, peak * 0.3, 0.006, 0.0005);
+  strike.connect(sHp); sHp.connect(sE); sE.connect(out);
+
+  out.connect(bus);
+  send(out, audio.reverbSend, 0.7);
+  send(out, audio.echoSend, 0.1);
+  return wait;
+}
+
+export const bellVoice = createVoice('bell', play, { role: 'air' });

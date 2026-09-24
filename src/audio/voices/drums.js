@@ -1,192 +1,380 @@
-import { audio } from '../context.js';
-import { state, LOOKAHEAD, beat, rand, pick } from '../../state.js';
+import { audio, getVoiceBus, noise } from '../context.js';
+import { state, beat, rand, pick, fold, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { osc, gain, filter, send, perc, shaper } from '../synth.js';
 
-// ─── Synthesis helpers ────────────────────────────────────────────────────────
+// ─── Kit ──────────────────────────────────────────────────────────────────────
+// Each piece takes (t, velocity). Kick/snare/clap sit centre; the rest are
+// spread across the stereo field the way a kit is miked.
+const out = piece => (piece ? getVoiceBus(`kit:${piece}`).dry : audio.dry);
 
-function kick(ctx, dest, t, gain) {
-  // Sine sweep: 155 Hz → 38 Hz transient body
-  const osc = ctx.createOscillator();
-  const env = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(155, t);
-  osc.frequency.exponentialRampToValueAtTime(38, t + 0.08);
-  env.gain.setValueAtTime(0.001, t);
-  env.gain.linearRampToValueAtTime(gain, t + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
-  osc.connect(env); env.connect(dest);
-  osc.start(t); osc.stop(t + 0.31);
-
-  // High click for attack definition
-  const click = ctx.createOscillator();
-  const cEnv  = ctx.createGain();
-  click.type = 'square'; click.frequency.value = 900;
-  cEnv.gain.setValueAtTime(gain * 0.07, t);
-  cEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.011);
-  click.connect(cEnv); cEnv.connect(dest);
-  click.start(t); click.stop(t + 0.013);
+function kick(t, v) {
+  const body = osc('sine', 160, t, t + 0.5);
+  body.frequency.setValueAtTime(165, t);
+  body.frequency.exponentialRampToValueAtTime(55, t + 0.06);
+  body.frequency.exponentialRampToValueAtTime(46, t + 0.3);
+  // Gentle saturation adds harmonics so the kick reads on small speakers.
+  const sat = shaper(1.6), env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(v, t + 0.002);
+  env.gain.setTargetAtTime(0, t + 0.002, 0.11);
+  body.connect(sat); sat.connect(env); env.connect(out());
+  const click = noise(t, 0.012), hp = filter('highpass', 2200), ce = gain(0);
+  perc(ce.gain, t, v * 0.28, 0.008, 0.0005);
+  click.connect(hp); hp.connect(ce); ce.connect(out());
 }
 
-function snare(ctx, dest, reverbDest, t, gain) {
-  // Noise burst through highpass
-  const dur    = 0.16;
-  const bufLen = Math.ceil(ctx.sampleRate * (dur + 0.01));
-  const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-  const data   = buf.getChannelData(0);
-  for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-  const src = ctx.createBufferSource(); src.buffer = buf;
-  const hp  = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0.001, t);
-  env.gain.linearRampToValueAtTime(gain, t + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(hp); hp.connect(env);
-  env.connect(dest);
-  // Small reverb tail gives snare some room
-  const wet = ctx.createGain(); wet.gain.value = 0.18;
-  env.connect(wet); wet.connect(reverbDest);
-  src.start(t); src.stop(t + dur + 0.01);
-
-  // Tonal body (snare "crack" tone)
-  const osc  = ctx.createOscillator();
-  const tEnv = ctx.createGain();
-  osc.type = 'triangle'; osc.frequency.value = 188;
-  tEnv.gain.setValueAtTime(gain * 0.5, t);
-  tEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-  osc.connect(tEnv); tEnv.connect(dest);
-  osc.start(t); osc.stop(t + 0.065);
+// 808-style long boom, tuned to the key's root — the pitched kick of trap.
+function kick808(t, v) {
+  const hz = midiToHz(fold(state.rootMidi, 28, 39));
+  const body = osc('sine', hz * 2.6, t, t + 1.4);
+  body.frequency.setValueAtTime(hz * 2.6, t);
+  body.frequency.exponentialRampToValueAtTime(hz, t + 0.05);
+  const sat = shaper(1.3), env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(v, t + 0.002);
+  env.gain.setTargetAtTime(0, t + 0.002, 0.38);
+  body.connect(sat); sat.connect(env); env.connect(out());
 }
 
-function clap(ctx, dest, reverbDest, t, gain) {
-  // Three staggered noise bursts through bandpass — simulates fingers meeting at different times
-  [0, 0.008, 0.018].forEach((offset, i) => {
-    const dur    = 0.045;
-    const bufLen = Math.ceil(ctx.sampleRate * (dur + 0.01));
-    const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-    const data   = buf.getChannelData(0);
-    for (let j = 0; j < bufLen; j++) data[j] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const bp  = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1000 + i * 200; bp.Q.value = 0.9;
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(gain * (1 - i * 0.25), t + offset);
-    env.gain.exponentialRampToValueAtTime(0.001, t + offset + dur);
-    src.connect(bp); bp.connect(env); env.connect(dest);
-    const wet = ctx.createGain(); wet.gain.value = 0.35;
-    env.connect(wet); wet.connect(reverbDest);
-    src.start(t + offset); src.stop(t + offset + dur + 0.01);
-  });
+function snare(t, v) {
+  for (const [f, level, decay] of [[185, 0.55, 0.09], [330, 0.28, 0.06]]) {
+    const o = osc('triangle', f * 1.12, t, t + decay + 0.05), e = gain(0);
+    o.frequency.setValueAtTime(f * 1.12, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.02);
+    perc(e.gain, t, v * level, decay, 0.001);
+    o.connect(e); e.connect(out());
+  }
+  const wires = noise(t, 0.25), bp = filter('bandpass', 3800, 0.55), hp = filter('highpass', 1200), e = gain(0);
+  perc(e.gain, t, v * 0.9, 0.17, 0.001);
+  wires.connect(bp); bp.connect(hp); hp.connect(e); e.connect(out());
+  send(e, audio.reverbSend, 0.18);
 }
 
-function hihat(ctx, dest, t, gain, open = false) {
-  const dur    = open ? 0.22 : 0.045;
-  const bufLen = Math.ceil(ctx.sampleRate * (dur + 0.01));
-  const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-  const data   = buf.getChannelData(0);
-  for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-  const src = ctx.createBufferSource(); src.buffer = buf;
-  const hp  = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 8500;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(gain, t);
-  env.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(hp); hp.connect(env); env.connect(dest);
-  src.start(t); src.stop(t + dur + 0.01);
+function clap(t, v) {
+  // Three hands a few ms apart, then the diffuse tail of the room.
+  const src = noise(t, 0.3), bp = filter('bandpass', 1150, 1.4), env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  for (const dt of [0, 0.011, 0.022]) {
+    env.gain.setValueAtTime(v, t + dt);
+    env.gain.exponentialRampToValueAtTime(v * 0.12, t + dt + 0.009);
+  }
+  env.gain.setValueAtTime(v * 0.75, t + 0.033);
+  env.gain.exponentialRampToValueAtTime(v * 1e-3, t + 0.22);
+  src.connect(bp); bp.connect(env); env.connect(out());
+  send(env, audio.reverbSend, 0.3);
 }
 
-// ─── Patterns (16 steps = 1 bar of 16th notes) ───────────────────────────────
-// Values: 1 = full hit, 0 = rest, 0.4 = ghost note (quieter)
-// H = open hi-hat (stored as negative — handled in scheduleBar)
+// Cross-stick / rim click: a short woody knock.
+function rim(t, v) {
+  for (const [f, level, decay] of [[1700, 0.45, 0.025], [520, 0.4, 0.04]]) {
+    const o = osc('sine', f, t, t + decay + 0.02), e = gain(0);
+    perc(e.gain, t, v * level, decay, 0.0005);
+    o.connect(e); e.connect(out('rim'));
+  }
+  const n = noise(t, 0.015), bp = filter('bandpass', 2500, 2), e = gain(0);
+  perc(e.gain, t, v * 0.5, 0.01, 0.0005);
+  n.connect(bp); bp.connect(e); e.connect(out('rim'));
+}
 
-const PATTERNS = {
-  minimal: {
-    kick:  [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
-    snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
-    hihat: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-  },
-  four_four: {
-    kick:  [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
-    snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
-    hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
-  },
-  jungle: {
-    kick:  [1,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,0],
-    snare: [0,0,0,0, 1,0,0,0.4, 0,0,0.4,0, 1,0,0,0],
-    hihat: [1,1,0,1, 1,0,1,1, 0,1,1,0, 1,1,0,1],
-  },
-  shuffle: {
-    kick:  [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
-    snare: [0,0,0,0, 1,0,0,0, 0,0,0.4,0, 1,0,0,0],
-    hihat: [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0],
-  },
-  trap: {
-    kick:  [1,0,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0],
-    snare: [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
-    hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
-  },
-  ghost: {
-    kick:  [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0],
-    snare: [0,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,0],
-    hihat: [0,0,1,0, 0,0,0,0, 0,1,0,0, 0,0,0,0],
-  },
-  halftime: {
-    kick:  [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0],
-    snare: [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0.4,0],
-    hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
-    clap:  [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
-  },
-  breakbeat: {
-    kick:  [1,0,0,0, 0,0,0,1, 0,0,1,0, 0,0,0,0],
-    snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0.4,0],
-    hihat: [1,0,1,1, 0,1,1,0, 1,1,0,1, 1,0,1,0],
-  },
-  bossanova: {
-    kick:  [1,0,0,0, 0,0,1,0, 0,1,0,0, 1,0,0,0],
-    snare: [0,0,0,0, 0.4,0,0,0, 0,0,0,0, 0.4,0,0,0],
-    hihat: [1,0,1,0, 0,1,0,1, 1,0,1,0, 0,1,0,0],
-  },
+// TR-808 "metal": six square waves at inharmonic frequencies, band-passed.
+// Much closer to a cymbal than white noise. Per hit, so every node it makes
+// stops and is released with the hit.
+const METAL_HZ = [205.3, 304.4, 369.6, 522.7, 540, 800];
+function metal(t, dur) {
+  const sum = gain(1 / METAL_HZ.length);
+  for (const f of METAL_HZ) osc('square', f, t, t + dur).connect(sum);
+  return sum;
+}
+
+let choke = null; // the ringing open hat, cut when the hat closes
+function hat(t, v, open = false) {
+  const decay = open ? 0.38 : 0.05;
+  const bp = filter('bandpass', 10000, 0.9), hp = filter('highpass', 7200), env = gain(0);
+  perc(env.gain, t, v, decay, 0.001);
+  metal(t, decay + 0.05).connect(bp);
+  const sizzle = noise(t, decay + 0.05), sG = gain(0.35);
+  sizzle.connect(sG); sG.connect(hp);
+  bp.connect(hp); hp.connect(env);
+  const c = gain(1);
+  env.connect(c); c.connect(out('hat'));
+  if (choke && choke.until > t) {
+    choke.node.gain.setValueAtTime(1, t);
+    choke.node.gain.setTargetAtTime(0, t, 0.01);
+  }
+  choke = open ? { node: c, until: t + decay } : null;
+}
+
+// Ride: a dense wash (noise) for the body of the cymbal, a little of the
+// 808 metal for shimmer, and the clear stick "ping" that carries swing time.
+function ride(t, v) {
+  const n = noise(t, 1.3), nBp = filter('bandpass', 6500, 0.5), nHp = filter('highpass', 2800), env = gain(0);
+  perc(env.gain, t, v * 0.55, 1.2, 0.001);
+  n.connect(nBp); nBp.connect(nHp); nHp.connect(env);
+  const m = metal(t, 1.0), mBp = filter('bandpass', 5200, 0.6), mG = gain(0.5);
+  m.connect(mBp); mBp.connect(mG); mG.connect(env);
+  env.connect(out('ride'));
+  for (const f of [3150, 4420, 5850]) {
+    const o = osc('sine', f, t, t + 0.4), e = gain(0);
+    perc(e.gain, t, v * 0.1, 0.32, 0.001);
+    o.connect(e); e.connect(out('ride'));
+  }
+  send(env, audio.reverbSend, 0.15);
+}
+
+function crash(t, v) {
+  const n = noise(t, 2.2), hp = filter('highpass', 3500), env = gain(0);
+  perc(env.gain, t, v, 1.8, 0.002);
+  n.connect(hp); hp.connect(env); env.connect(out('crash'));
+  send(env, audio.reverbSend, 0.3);
+}
+
+// Toms and congas are tuned to the key: low to the root, high to the fifth.
+function drum(t, v, hz, piece, decay, verb) {
+  const o = osc('sine', hz * 1.5, t, t + decay + 0.1), e = gain(0);
+  o.frequency.setValueAtTime(hz * 1.5, t);
+  o.frequency.exponentialRampToValueAtTime(hz, t + 0.04);
+  perc(e.gain, t, v, decay, 0.001);
+  o.connect(e); e.connect(out(piece));
+  const n = noise(t, 0.03), bp = filter('bandpass', hz * 4, 1), ne = gain(0);
+  perc(ne.gain, t, v * 0.25, 0.02, 0.0005);
+  n.connect(bp); bp.connect(ne); ne.connect(out(piece));
+  send(e, audio.reverbSend, verb);
+}
+const tomLo   = (t, v) => drum(t, v, midiToHz(fold(state.rootMidi, 38, 49)), 'tomLo', 0.45, 0.25);
+const tomHi   = (t, v) => drum(t, v, midiToHz(fold(state.rootMidi + 7, 45, 56)), 'tomHi', 0.32, 0.25);
+const congaLo = (t, v) => drum(t, v, midiToHz(fold(state.rootMidi, 50, 61)), 'tomLo', 0.18, 0.12);
+const congaHi = (t, v) => drum(t, v, midiToHz(fold(state.rootMidi + 7, 57, 68)), 'tomHi', 0.12, 0.12);
+const taiko   = (t, v) => { drum(t, v, midiToHz(fold(state.rootMidi, 31, 42)), null, 0.9, 0.5); kick(t, v * 0.5); };
+
+function shaker(t, v) {
+  const n = noise(t, 0.1), bp = filter('bandpass', 7000, 1.2), env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(v, t + 0.012); // beads take a moment to hit the shell
+  env.gain.exponentialRampToValueAtTime(v * 1e-3, t + 0.08);
+  n.connect(bp); bp.connect(env); env.connect(out('shaker'));
+}
+
+// 808 cowbell (two detuned squares) — the timeline bell in the 12/8 groove.
+function cowbell(t, v) {
+  const bp = filter('bandpass', 1400, 1.1), env = gain(0);
+  for (const f of [587, 845]) osc('square', f, t, t + 0.32).connect(bp);
+  perc(env.gain, t, v, 0.28, 0.001);
+  bp.connect(env); env.connect(out('perc'));
+}
+
+// Brushes: a swish is a filtered-noise swell stirred across the head; a tap
+// is a soft, short hit.
+function swish(t, v) {
+  const len = beat() * 0.9;
+  const n = noise(t, len + 0.05), bp = filter('bandpass', 4200, 0.6), env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(v, t + len * 0.45);
+  env.gain.linearRampToValueAtTime(0, t + len);
+  n.connect(bp); bp.connect(env); env.connect(out('hat'));
+}
+function brushTap(t, v) {
+  const n = noise(t, 0.15), bp = filter('bandpass', 2800, 0.5), env = gain(0);
+  perc(env.gain, t, v, 0.12, 0.002);
+  n.connect(bp); bp.connect(env); env.connect(out());
+  send(env, audio.reverbSend, 0.2);
+}
+
+// Per-piece loudness (before density/brightness scaling and velocity).
+const KIT = {
+  kick:    [kick,    0.32],  k808:  [kick808, 0.28], snare:   [snare,   0.2],
+  clap:    [clap,    0.17],  rim:   [rim,     0.16], hat:     [(t, v) => hat(t, v), 0.1],
+  ohat:    [(t, v) => hat(t, v, true), 0.08],        ride:    [ride,    0.55],
+  crash:   [crash,   0.08],  tomLo: [tomLo,   0.26], tomHi:   [tomHi,   0.22],
+  congaLo: [congaLo, 0.2],   congaHi: [congaHi, 0.18], taiko: [taiko,   0.3],
+  shaker:  [shaker,  0.06],  bell:  [cowbell, 0.07], swish:   [swish,   0.3],
+  btap:    [brushTap, 0.34],
 };
 
-const STYLE_NAMES = Object.keys(PATTERNS);
+// ─── Patterns ─────────────────────────────────────────────────────────────────
+// One bar per string, one character per step: X accent, x hit, o medium,
+// g ghost, f feathered (felt more than heard), ? ghost that plays only
+// sometimes (variation), . rest.
+// 16 steps = sixteenths; 12 steps = eighth-note triplets (a swung or 12/8 bar).
+//   swing   — MPC-style: fraction of an eighth taken by its first sixteenth
+//   human   — small timing/velocity drift, for styles played by a person
+//   fill    — 'snare' or 'tom' fill at the end of 4-bar phrases (then a crash)
+//   rolls   — trap hi-hat rolls
+//   bpm     — tempo range the style suits (Infinite mode picks by tempo)
+const VEL = { X: 1.15, x: 1, o: 0.62, g: 0.35, f: 0.15 };
 
-// ─── Voice ────────────────────────────────────────────────────────────────────
+const STYLES = {
+  minimal: { bpm: [50, 140], tracks: {
+    kick:  'x.......x.......',
+    snare: '....x.......x...' } },
+  four_four: { bpm: [70, 140], human: true, fill: 'snare', tracks: {
+    kick:  'x.......x.x.....',
+    snare: '....x.......x...',
+    hat:   'x.o.x.o.x.o.x.o.' } },
+  jungle: { bpm: [80, 140], fill: 'snare', tracks: {
+    kick:  'x.....x.....x...',
+    snare: '....x..g..g.x...',
+    hat:   'xo.ox.oo.oo.xo.o' } },
+  shuffle: { steps: 12, bpm: [60, 130], human: true, fill: 'snare', tracks: {
+    kick:  'x.....x.....',
+    snare: '...x.....x.g',
+    hat:   'x.ox.ox.ox.o' } },
+  trap: { bpm: [60, 140], rolls: true, tracks: {
+    k808:  'x......x.x......',
+    snare: '........x.......',
+    clap:  '........x.......',
+    hat:   'xoxoxoxoxoxoxoxo' } },
+  ghost: { bpm: [50, 140], tracks: {
+    kick:  'x.............x.',
+    snare: '......x.....x...',
+    hat:   '..x......x......' } },
+  halftime: { bpm: [60, 140], fill: 'snare', tracks: {
+    kick:  'x.....x.........',
+    snare: '........x.....g.',
+    clap:  '........x.......',
+    hat:   'x.o.x.o.x.o.x.o.' } },
+  breakbeat: { bpm: [80, 140], swing: 0.54, human: true, fill: 'snare', tracks: {
+    kick:  'x......x..x.....',
+    snare: '....x.......x.g.',
+    hat:   'x.og.go.xg.gx.o.' } },
+  bossanova: { bpm: [60, 140], human: true, tracks: {
+    kick:  'x.....x.x.....x.',
+    rim:   'x..x..x...x..x..',
+    hat:   'o.g.o.g.o.g.o.g.' } },
+  house: { bpm: [110, 140], fill: 'snare', tracks: {
+    kick:   'x...x...x...x...',
+    clap:   '....x.......x...',
+    ohat:   '..x...x...x...x.',
+    shaker: 'ogogogogogogogog' } },
+  swing: { steps: 12, bpm: [60, 140], human: true, fill: 'snare', tracks: {
+    ride:  'x..x.xx..x.x',
+    hat:   '...o.....o..',
+    kick:  'f..f..f..f..',
+    snare: '..?..?..?..?' } },
+  funk: { bpm: [85, 125], swing: 0.53, human: true, fill: 'snare', tracks: {
+    kick:  'x.x....x..x..x..',
+    snare: '....X..g.g..X..g',
+    hat:   'xoxoxoxoxoxoxo.o',
+    ohat:  '..............x.' } },
+  boombap: { bpm: [70, 100], swing: 0.58, human: true, tracks: {
+    kick:  'x......x..x.....',
+    snare: '....x.......x...',
+    hat:   'x.o.x.o.x.o.x.o.' } },
+  reggae: { steps: 12, bpm: [60, 100], human: true, tracks: {
+    kick:  '......x.....',
+    rim:   '......x.....',
+    hat:   'x.ox.ox.ox.o' } },
+  dembow: { bpm: [85, 110], tracks: {
+    kick:  'x...x...x...x...',
+    snare: '...x..x....x..x.',
+    hat:   'o.g.o.g.o.g.o.g.' } },
+  afro: { steps: 12, bpm: [80, 140], human: true, tracks: {
+    bell:    'x.x.xx.x.x.x',
+    shaker:  'oggoggoggogg',
+    kick:    'x.....x.....',
+    congaHi: '...o.x...o.x',
+    congaLo: '........x...' } },
+  cinematic: { bpm: [60, 110], human: true, fill: 'tom', tracks: {
+    taiko: 'X.......x.......',
+    tomLo: 'x..x..x...x..x..',
+    tomHi: '....o.......o.o.' } },
+  brushes: { bpm: [50, 110], swing: 0.66, human: true, tracks: {
+    swish: 'x...x...x...x...',
+    btap:  '....x.......x...',
+    kick:  'f.......f.......',
+    hat:   '....o.......o...' } },
+  garage: { bpm: [118, 140], swing: 0.62, tracks: {
+    kick:   'x.........x.....',
+    snare:  '....x.......x...',
+    hat:    'x.o.x.o.x.o.x.o.',
+    shaker: '.g.g.g.g.g.g.g.g' } },
+};
 
-export const drumsVoice = (() => {
-  let nextTime = 0;
-  let style    = pick(STYLE_NAMES);
+// Fills replace snare/toms/cymbals over the last beat (or two, every 8th bar).
+const FILLS = {
+  16: {
+    snare: { 4: { snare: 'goxX' }, 8: { snare: 'g.gooxxX' } },
+    tom:   { 4: { tomHi: 'xo..', tomLo: '..xx' }, 8: { snare: 'x.......', tomHi: '.xx.o...', tomLo: '....xxoX' } },
+  },
+  12: {
+    snare: { 3: { snare: 'gox' }, 6: { snare: 'gogoxX' } },
+    tom:   { 3: { tomHi: 'xo.', tomLo: '..x' }, 6: { tomHi: 'xxo...', tomLo: '...xoX' } },
+  },
+};
+const FILL_REPLACES = ['snare', 'tomHi', 'tomLo', 'hat', 'ohat', 'ride', 'rim', 'clap'];
 
-  function scheduleBar(t) {
-    const { ctx, masterGain, reverbNode } = audio;
-    const b       = beat();
-    const stepDur = b / 4; // 16th note duration
-    const p       = PATTERNS[style];
+// ─── Sequencer ────────────────────────────────────────────────────────────────
+let style = 'four_four';
+let curBar = -1, fill = null, fillFrom = 99, crashNext = false, rollSteps = new Set();
 
-    // Scale gains with musical state
-    const densityMod = 0.5 + state.density * 0.5;
-    const kGain = rand(0.34, 0.43) * densityMod;
-    const sGain = rand(0.19, 0.27) * densityMod;
-    const hGain = rand(0.07, 0.11) * (0.4 + state.brightness * 0.6);
-    const cGain = rand(0.16, 0.23) * densityMod;
+function startBar(bar, p, steps) {
+  curBar = bar;
+  fill = null; fillFrom = 99;
+  if (p.fill && bar % 4 === 3 && (bar % 8 === 7 || Math.random() < 0.55)) {
+    const beats = bar % 8 === 7 ? 2 : 1;
+    const n = beats * steps / 4;
+    fill = FILLS[steps][p.fill][n];
+    fillFrom = steps - n;
+  }
+  rollSteps = new Set();
+  if (p.rolls) for (const s of [6, 7, 14, 15]) if (Math.random() < 0.3) rollSteps.add(s);
+}
 
-    for (let i = 0; i < 16; i++) {
-      const st = t + i * stepDur;
-      if (p.kick[i])              kick(ctx, masterGain, st, kGain  * p.kick[i]);
-      if (p.snare[i])             snare(ctx, masterGain, reverbNode, st, sGain * p.snare[i]);
-      if (p.hihat[i])             hihat(ctx, masterGain, st, hGain  * p.hihat[i]);
-      if (p.clap && p.clap[i])    clap(ctx, masterGain, reverbNode, st, cGain  * p.clap[i]);
-    }
+function play(t, b) {
+  const p     = STYLES[style];
+  const steps = p.steps || 16;
+  const unit  = 4 / steps;
+  const bar   = Math.floor(b / 4 + 1e-6);
+  const i     = Math.round((b - bar * 4) / unit) % steps;
+  if (bar !== curBar) startBar(bar, p, steps);
 
-    return b * 4; // one bar
+  const stepSec = unit * beat();
+  let st = t;
+  if (steps === 16 && i % 2 === 1 && p.swing) st += (p.swing - 0.5) * 2 * stepSec;
+
+  const density = 0.5 + state.density * 0.5;
+  const bright  = 0.4 + state.brightness * 0.6;
+
+  const hits = [];
+  if (i === 0 && crashNext) { hits.push(['crash', 1]); crashNext = false; }
+  for (const [track, line] of Object.entries(p.tracks)) {
+    if (i >= fillFrom && FILL_REPLACES.includes(track)) continue;
+    hits.push([track, line[i]]);
+  }
+  if (fill) {
+    for (const [track, line] of Object.entries(fill)) hits.push([track, line[i - fillFrom]]);
+    if (i === steps - 1) crashNext = true;
   }
 
-  return {
-    name: 'drums',
-    get style() { return style; },
-    reroll() { style = pick(STYLE_NAMES); },
-    setStyle(s) { style = s; },
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += scheduleBar(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+  for (const [track, ch] of hits) {
+    let v = ch === '?' ? (Math.random() < 0.35 ? VEL.g : 0) : VEL[ch] || 0;
+    if (!v) continue;
+    const [fn, level] = KIT[track];
+    const scale = ['hat', 'ohat', 'ride', 'shaker', 'crash', 'swish'].includes(track) ? bright : density;
+    let at = st;
+    if (p.human) { at += rand(-0.004, 0.004); v *= rand(0.9, 1.07); }
+    if (track === 'hat' && rollSteps.has(i)) {
+      const n = pick([2, 3, 4]);
+      for (let r = 0; r < n; r++) fn(at + r * stepSec / n, level * scale * v * (0.6 + 0.4 * r / n));
+      continue;
+    }
+    fn(Math.max(t, at), level * scale * v);
+  }
+
+  return bar * 4 + (i + 1) * unit - b; // re-snap to the exact grid every step
+}
+
+const voice = createVoice('drums', play, { entry: 4, onReset: () => { curBar = -1; crashNext = false; choke = null; } });
+
+export const DRUM_STYLES = Object.keys(STYLES);
+
+export const drumsVoice = {
+  ...voice,
+  get style() { return style; },
+  // Infinite mode: choose a style that suits the current tempo.
+  reroll() {
+    const fits = DRUM_STYLES.filter(s => state.tempo >= STYLES[s].bpm[0] && state.tempo <= STYLES[s].bpm[1]);
+    style = pick(fits.length ? fits : DRUM_STYLES);
+  },
+  setStyle(s) { style = s; },
+};

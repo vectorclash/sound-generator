@@ -1,59 +1,40 @@
-import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, lerp, midiToHz, scaleNotes } from '../../state.js';
+import { getVoiceBus } from '../context.js';
+import { state, beat, lerp, register } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
 import { harmony } from '../harmony.js';
+import { gain, filter, pluckBuffer, playBuffer } from '../synth.js';
 
-export const clavinetVoice = (() => {
-  let nextTime = 0;
-  let lastMidi = -1;
+// Clavinet: a string struck by a tangent and damped the moment the key lifts.
+// Modelled as a very bright Karplus–Strong string struck near the bridge
+// (twangy, nasal), cut short by a fast damper release, through a resonant
+// lowpass that snaps shut — the "quack" of funk clav. Plays repeating riffs
+// with occasional double-stops, like the right hand on "Superstition".
+const phraser = createPhraser({ name: 'clavinet', base: () => register(24, 48, 60), style: 'active', ostinato: true, repeat: 0.85 });
 
-  function play(t) {
-    const { ctx } = audio;
-    const masterGain = getVoiceBus('clavinet').dry;
-    if (Math.random() < 0.1) return beat() * pick([0.25, 0.5]);
+function strike(t, midi, gate, vel) {
+  const src = playBuffer(pluckBuffer(midi, { t60: 1.1, bright: 1, pick: 0.06, stretch: 0.2, length: gate + 0.1 }), t, t + gate + 0.1);
+  const lp = filter('lowpass', 800, 5);
+  lp.frequency.setValueAtTime(lerp(2400, 5200, state.brightness), t);
+  lp.frequency.exponentialRampToValueAtTime(900, t + 0.13);
+  const env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.5 * vel * lerp(0.6, 1, state.density), t + 0.002);
+  env.gain.setTargetAtTime(0, t + gate, 0.012);
+  src.connect(lp); lp.connect(env); env.connect(getVoiceBus('clavinet').dry);
+}
 
-    const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes = scaleNotes(state.rootBase + 24, scale, 2);
-    let midi;
-    if (lastMidi > 0 && Math.random() < 0.55) {
-      const idx = notes.indexOf(lastMidi);
-      if (idx >= 0) midi = notes[Math.max(0, Math.min(notes.length - 1, idx + pick([-3, -2, -1, 1, 2, 3])))];
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
+  const gate = Math.min(ev.dur * beat() * 0.55, 0.28);
+  strike(t, ev.midi, gate, ev.vel);
+  if (Math.random() < 0.25) {
+    for (let m = ev.midi + 3; m <= ev.midi + 5; m++) {
+      if (harmony.isChordTone(m, b)) { strike(t, m, gate, ev.vel * 0.85); break; }
     }
-    if (!midi) midi = harmony.pickChordTone(notes);
-    lastMidi = midi;
-
-    const hz        = midiToHz(midi);
-    const gain      = rand(0.10, 0.17) * (0.5 + state.density * 0.5);
-    const decaySec  = rand(0.10, 0.22);
-
-    const osc  = ctx.createOscillator();
-    const filt = ctx.createBiquadFilter();
-    const env  = ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.value = hz;
-
-    filt.type = 'bandpass';
-    filt.frequency.value = lerp(700, 2200, state.brightness);
-    filt.Q.value = 2.8;
-
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(gain, t + 0.003);
-    env.gain.exponentialRampToValueAtTime(0.001, t + decaySec);
-
-    osc.connect(filt); filt.connect(env); env.connect(masterGain);
-    osc.start(t); osc.stop(t + decaySec + 0.01);
-
-    return beat() * pick([0.25, 0.5, 0.5, 0.75]);
   }
+  return ev.gap;
+}
 
-  return {
-    name: 'clavinet',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; lastMidi = -1; },
-  };
-})();
+export const clavinetVoice = createVoice('clavinet', play, { entry: 4, role: 'motion', onReset: phraser.reset });

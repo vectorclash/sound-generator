@@ -1,62 +1,44 @@
-import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { audio, getVoiceBus, noise } from '../context.js';
+import { rand, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
 import { harmony } from '../harmony.js';
+import { osc, gain, filter, send, perc } from '../synth.js';
 
-export const kalimbaVoice = (() => {
-  let nextTime = 0;
+// Kalimba / mbira: music built from repeating, interlocking ostinato figures,
+// so it uses the phrase generator in riff mode (a figure repeated bar after
+// bar, re-anchored to each chord). The tine is a near-sine with a brief
+// inharmonic overtone (clamped metal tines sit around 6× the fundamental), a
+// woody thump from the box, and sometimes a second thumb a third below.
+const phraser = createPhraser({ name: 'kalimba', base: () => register(36, 57, 72), style: 'active', ostinato: true, repeat: 0.85 });
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('kalimba').dry;
-    if (Math.random() < 0.1) return beat() * 0.25;
+function tine(t, midi, vel) {
+  const bus  = getVoiceBus('kalimba').dry;
+  const hz   = midiToHz(midi);
+  const peak = 0.14 * vel;
+  const decay = rand(0.9, 1.4);
+  const o = osc('sine', hz, t, t + decay + 0.05), e = gain(0);
+  perc(e.gain, t, peak, decay);
+  const o2 = osc('sine', hz * 6.1, t, t + 0.12), e2 = gain(0);
+  perc(e2.gain, t, peak * 0.14, 0.08);
+  const th = noise(t, 0.03), thLp = filter('lowpass', 700), thE = gain(0);
+  perc(thE.gain, t, peak * 0.45, 0.018, 0.001);
+  o.connect(e); o2.connect(e2); th.connect(thLp); thLp.connect(thE);
+  for (const n of [e, e2, thE]) n.connect(bus);
+  send(e, audio.reverbSend, 0.42);
+  send(e, audio.echoSend, 0.12);
+}
 
-    const scale    = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes    = scaleNotes(state.rootBase + 36, scale, 2);
-    const numNotes = Math.random() < 0.4 ? 2 : 1; // two thumbs occasionally
-
-    for (let n = 0; n < numNotes; n++) {
-      const midi      = harmony.pickChordTone(notes);
-      const hz        = midiToHz(midi);
-      const offset    = n * 0.04; // thumb stagger
-      const gain      = rand(0.05, 0.09);
-      const decayTime = rand(0.8, 1.4);
-
-      // Fundamental tine (pure sine)
-      const osc = ctx.createOscillator();
-      const env = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = hz;
-      env.gain.setValueAtTime(gain, t + offset);
-      env.gain.exponentialRampToValueAtTime(0.001, t + offset + decayTime);
-
-      // Inharmonic tine overtone — brief metallic click on attack
-      const osc2 = ctx.createOscillator();
-      const env2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.value = hz * 5.44;
-      env2.gain.setValueAtTime(gain * 0.18, t + offset);
-      env2.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.10);
-
-      osc.connect(env); env.connect(masterGain);
-      osc2.connect(env2); env2.connect(masterGain);
-      const wet = ctx.createGain(); wet.gain.value = 0.42;
-      env.connect(wet); wet.connect(reverbNode);
-
-      osc.start(t + offset); osc.stop(t + offset + decayTime + 0.05);
-      osc2.start(t + offset); osc2.stop(t + offset + 0.12);
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
+  tine(t, ev.midi, ev.vel);
+  if (Math.random() < 0.25) {
+    for (let m = ev.midi - 3; m >= ev.midi - 4; m--) {
+      if (harmony.isChordTone(m, b)) { tine(t + 0.03, m, ev.vel * 0.8); break; }
     }
-
-    return beat() * pick([0.25, 0.5, 0.5, 0.75]);
   }
+  return ev.gap;
+}
 
-  return {
-    name: 'kalimba',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+export const kalimbaVoice = createVoice('kalimba', play, { entry: 4, role: 'motion', onReset: phraser.reset });

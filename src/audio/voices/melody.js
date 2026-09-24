@@ -1,51 +1,40 @@
 import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, lerp, midiToHz, scaleNotes } from '../../state.js';
-import { harmony } from '../harmony.js';
+import { state, beat, rand, lerp, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
+import { osc, gain, send, lfo } from '../synth.js';
 
-export const melodyVoice = (() => {
-  let nextTime = 0;
-  let lastMidi  = -1;
+// Soft synth lead: triangle with a quiet octave partial and delayed vibrato.
+// One consistent timbre (it used to flip between sine and triangle per note).
+const phraser = createPhraser({ name: 'melody', base: () => register(24, 50, 69), lead: true });
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('melody').dry;
-    if (Math.random() < 0.25) return beat() * pick([0.5, 1, 1]);
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
 
-    const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes = scaleNotes(state.rootBase + 24, scale, 2);
-    let midi;
-    if (lastMidi > 0 && Math.random() < 0.65) {
-      const idx = notes.indexOf(lastMidi);
-      if (idx >= 0) {
-        midi = notes[Math.max(0, Math.min(notes.length - 1, idx + (Math.random() < 0.5 ? 1 : -1)))];
-      }
-    }
-    if (!midi) midi = harmony.pickChordTone(notes);
-    lastMidi = midi;
+  const bus  = getVoiceBus('melody').dry;
+  const hz   = midiToHz(ev.midi);
+  const dur  = ev.dur * beat();
+  const peak = 0.15 * ev.vel * lerp(0.6, 1.0, state.density);
+  const end  = t + dur + 0.5;
 
-    const hz   = midiToHz(midi);
-    const dur  = beat() * pick([0.5, 0.5, 1, 1, 1.5, 2]);
-    const gain = rand(0.09, 0.16) * lerp(0.55, 1.0, state.density);
-    const osc  = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
-    osc.type = Math.random() < 0.5 ? 'sine' : 'triangle';
-    osc.frequency.value = hz; osc.detune.value = rand(-4, 4);
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(gain, t + 0.02);
-    env.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.88);
-    wet.gain.value = 0.6;
-    osc.connect(env); env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-    osc.start(t); osc.stop(t + dur + 0.05);
-    return dur;
-  }
+  const env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(peak, t + 0.025);
+  env.gain.setTargetAtTime(peak * 0.72, t + 0.025, 0.3);
+  env.gain.setTargetAtTime(0, t + dur, 0.07);
 
-  return {
-    name: 'melody',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; lastMidi = -1; },
-  };
-})();
+  const main = osc('triangle', hz, t, end, rand(-3, 3));
+  const oct  = osc('sine', hz * 2, t, end);
+  const octG = gain(0.16);
+  const vib  = lfo(rand(4.8, 5.6), 11, t, end, Math.min(0.3, dur * 0.5), 0.35); // cents
+  vib.connect(main.detune); vib.connect(oct.detune);
+
+  main.connect(env); oct.connect(octG); octG.connect(env);
+  env.connect(bus);
+  send(env, audio.reverbSend, 0.5);
+  send(env, audio.echoSend, 0.12);
+  return ev.gap;
+}
+
+export const melodyVoice = createVoice('melody', play, { entry: 4, role: 'lead', onReset: phraser.reset });

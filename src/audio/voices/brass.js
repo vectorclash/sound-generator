@@ -1,52 +1,60 @@
 import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { state, beat, rand, lerp, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
 import { harmony } from '../harmony.js';
+import { osc, gain, filter, send, lfo } from '../synth.js';
 
-export const brassVoice = (() => {
-  let nextTime = 0;
+// Brass: the defining trait is that brightness follows loudness — a lowpass
+// opens as the note swells and closes as it settles ("bloom"). The pitch
+// scoops up from slightly flat as the lips lock onto the note, and vibrato
+// arrives late. Strong-beat notes are sometimes harmonised a third below,
+// the way a horn section voices a line.
+const phraser = createPhraser({ name: 'brass', base: () => register(24, 50, 64), lead: true, repeat: 0.65 });
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('brass').dry;
-    if (Math.random() < 0.3) return beat() * pick([1, 2]);
+function horn(t, midi, dur, vel, level) {
+  const bus = getVoiceBus('brass').dry;
+  const hz  = midiToHz(midi);
+  const end = t + dur + 0.4;
+  const peak = level * vel;
 
-    const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const hz    = midiToHz(harmony.pickChordTone(scaleNotes(state.rootBase + 24, scale, 2)));
-    const dur   = beat() * pick([1, 1, 1.5, 2]);
-    const gain  = rand(0.10, 0.16);
+  const lp = filter('lowpass', hz * 1.2, 1.3);
+  const open = hz * lerp(3.5, 7, vel * (0.4 + 0.6 * state.brightness));
+  lp.frequency.setValueAtTime(hz * 1.2, t);
+  lp.frequency.exponentialRampToValueAtTime(open, t + 0.07);
+  lp.frequency.setTargetAtTime(hz * lerp(2.4, 4.2, state.brightness), t + 0.07, 0.25);
+  lp.frequency.setTargetAtTime(hz * 1.1, t + dur, 0.06);
 
-    // Two detuned oscillators — ensemble width, like two players on the same part
-    const osc1 = ctx.createOscillator(), osc2 = ctx.createOscillator();
-    const filt = ctx.createBiquadFilter();
-    const env  = ctx.createGain(), wet = ctx.createGain();
-    osc1.type = 'sawtooth'; osc1.frequency.value = hz; osc1.detune.value = -6;
-    osc2.type = 'sawtooth'; osc2.frequency.value = hz; osc2.detune.value =  6;
-    filt.type = 'bandpass'; filt.Q.value = 3.8;
-    // Formant sweep — lips opening then settling
-    filt.frequency.setValueAtTime(hz * 1.5, t);
-    filt.frequency.exponentialRampToValueAtTime(hz * 4.5, t + 0.04);
-    filt.frequency.exponentialRampToValueAtTime(hz * 2.2, t + 0.18);
-    filt.frequency.exponentialRampToValueAtTime(hz * 1.8, t + dur);
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(gain, t + 0.03);
-    env.gain.setValueAtTime(gain * 0.75, t + 0.15);
-    env.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    wet.gain.value = 0.3;
-    osc1.connect(filt); osc2.connect(filt); filt.connect(env);
-    env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-    osc1.start(t); osc1.stop(t + dur + 0.05);
-    osc2.start(t); osc2.stop(t + dur + 0.05);
-    return beat() * pick([1, 1, 2]);
+  const vib = lfo(rand(5, 5.6), 9, t, end, Math.min(0.35, dur * 0.5), 0.3);
+  for (const d of [-5, 5]) {
+    const o = osc('sawtooth', hz, t, end, d);
+    o.detune.setValueAtTime(d - 28, t);
+    o.detune.linearRampToValueAtTime(d, t + 0.07);
+    vib.connect(o.detune);
+    o.connect(lp);
   }
 
-  return {
-    name: 'brass',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+  const env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(peak, t + 0.045);
+  env.gain.setTargetAtTime(peak * 0.8, t + 0.045, 0.15);
+  env.gain.setTargetAtTime(0, t + dur, 0.07);
+  lp.connect(env);
+  env.connect(bus);
+  send(env, audio.reverbSend, 0.32);
+}
+
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
+  const dur = ev.dur * beat();
+  horn(t, ev.midi, dur, ev.vel, 0.11);
+  if (ev.vel > 0.85 && Math.random() < 0.4) {
+    for (let m = ev.midi - 3; m >= ev.midi - 4; m--) {
+      if (harmony.isChordTone(m, b)) { horn(t, m, dur, ev.vel * 0.8, 0.08); break; }
+    }
+  }
+  return ev.gap;
+}
+
+export const brassVoice = createVoice('brass', play, { entry: 4, role: 'lead', onReset: phraser.reset });

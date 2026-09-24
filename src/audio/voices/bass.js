@@ -1,122 +1,210 @@
-import { audio } from '../context.js';
-import { state, LOOKAHEAD, beat, rand, pick, midiToHz } from '../../state.js';
-import { harmony } from '../harmony.js';
+import { audio, noise } from '../context.js';
+import { state, beat, rand, pick, currentScale, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { harmony, bassRoot } from '../harmony.js';
+import { osc, gain, filter, perc, ahr, pluckBuffer, playBuffer } from '../synth.js';
+
+// ─── Bass ─────────────────────────────────────────────────────────────────────
+// Every style is tied to the harmonic rhythm: the chord root lands on the
+// arrival of each chord, no note is held across a chord change, and the last
+// note before a change often *leads into* the next root (an approach tone) —
+// that anticipation is most of what makes a bass line sound like a line.
 
 const STYLES = ['sub', 'plucked', 'walking', 'synth', 'rumble'];
+const LO = 28, HI = 55; // E1 … G3
 
-export const bassVoice = (() => {
-  let nextTime = 0;
-  let style = 'sub';
+// Plucked (finger bass): one-bar rhythms of [beats, note]. R root, F fifth,
+// O octave, A approach into the next chord (a chord tone if none is coming).
+const PLUCK_RHYTHMS = [
+  [[1.5, 'R'], [0.5, 'R'], [1, 'F'], [1, 'A']],
+  [[1, 'R'], [1, 'R'], [1, 'F'], [1, 'A']],
+  [[0.75, 'R'], [0.75, 'R'], [0.5, 'O'], [1, 'F'], [1, 'A']],
+  [[2, 'R'], [1.5, 'F'], [0.5, 'A']],
+  [[1.5, 'R'], [1.5, 'F'], [1, 'A']],
+];
+// Synth: sixteenth-note patterns. Letters start a note, '-' holds it, '.' rests.
+const SYNTH_PATTERNS = [
+  'R.O.R.O.R.O.R.O.', // octave bounce (disco / electro)
+  '..R-..R-..R-..R-', // off-beat eighths (house / trance)
+  'R-.R-.R-R-.R-.O-', // 3-3-2 syncopation with an octave pickup
+  'R-R-R-R-R-R-F-A-', // driving eighths into the change
+];
 
-  function playNote(t) {
-    const { ctx, masterGain } = audio;
-    // Follow the current chord: root most of the time, occasionally its fifth.
-    const chord = harmony.chordMidis(state.rootBase, 3); // [root, third, fifth]
-    const midi  = pick([chord[0], chord[0], chord[0], chord[2]]);
-    const hz    = midiToHz(midi);
-    const b     = beat();
+let style  = 'sub';
+let prev   = null; // last bass note (MIDI) — keeps root motion smooth
+let curBar = -1;
+let cell   = PLUCK_RHYTHMS[0];
+let pattern = SYNTH_PATTERNS[0];
 
-    if (style === 'sub') {
-      const dur = b * pick([2, 2, 3, 4]);
-      const gain = rand(0.26, 0.36);
-      const osc = ctx.createOscillator(), sub = ctx.createOscillator();
-      const env = ctx.createGain(), filt = ctx.createBiquadFilter();
-      osc.type = 'triangle'; osc.frequency.value = hz;
-      sub.type = 'sine';     sub.frequency.value = hz * 0.5;
-      filt.type = 'lowpass'; filt.frequency.value = 480; filt.Q.value = 0.8;
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain, t + 0.04);
-      env.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.88);
-      osc.connect(filt); sub.connect(filt); filt.connect(env); env.connect(masterGain);
-      osc.start(t); osc.stop(t + dur); sub.start(t); sub.stop(t + dur);
-      return dur;
+const inRange = m => Math.max(LO, Math.min(HI, m));
+const inScale = m => currentScale().includes((((m - state.rootMidi) % 12) + 12) % 12);
 
-    } else if (style === 'plucked') {
-      const dur = b * pick([0.5, 1, 1, 1.5]);
-      const gain = rand(0.22, 0.30);
-      const osc = ctx.createOscillator(), env = ctx.createGain(), filt = ctx.createBiquadFilter();
-      osc.type = 'sawtooth'; osc.frequency.value = hz;
-      filt.type = 'lowpass';
-      filt.frequency.setValueAtTime(1200, t);
-      filt.frequency.exponentialRampToValueAtTime(200, t + dur * 0.6);
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain, t + 0.008);
-      env.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.75);
-      osc.connect(filt); filt.connect(env); env.connect(masterGain);
-      osc.start(t); osc.stop(t + dur);
-      return dur;
+function root(seg)     { return bassRoot(seg.degree, prev, LO, HI); }
+function nextRoot(seg) { return bassRoot(seg.next, prev, LO, HI); }
+function fifth(r)      { return r + 7 <= HI ? r + 7 : r - 5; }
 
-    } else if (style === 'walking') {
-      const stepDur = b * pick([0.5, 1]);
-      // Walk through the chord tones: root – third – fifth – third.
-      const steps = [chord[0], chord[1], chord[2], chord[1]];
-      for (let i = 0; i < steps.length; i++) {
-        const st  = t + i * stepDur;
-        const shz = midiToHz(steps[i]);
-        const gain = rand(0.16, 0.22);
-        const osc = ctx.createOscillator(), env = ctx.createGain(), filt = ctx.createBiquadFilter();
-        osc.type = 'triangle'; osc.frequency.value = shz;
-        filt.type = 'lowpass'; filt.frequency.value = 520;
-        env.gain.setValueAtTime(0, st);
-        env.gain.linearRampToValueAtTime(gain, st + 0.015);
-        env.gain.exponentialRampToValueAtTime(0.001, st + stepDur * 0.8);
-        osc.connect(filt); filt.connect(env); env.connect(masterGain);
-        osc.start(st); osc.stop(st + stepDur);
-      }
-      return steps.length * stepDur;
+// Lead into `target` from `from`: a chromatic half step (most common), a
+// diatonic neighbour, or the target's own fifth (a dominant approach).
+function approach(target, from) {
+  const dir = from > target ? 1 : -1; // come in from the side we're already on
+  const r = Math.random();
+  if (r < 0.45) return inRange(target + dir);
+  if (r < 0.8) {
+    for (let d = 1; d <= 2; d++) if (inScale(target + dir * d)) return inRange(target + dir * d);
+  }
+  return inRange(target + (dir > 0 ? 7 : -5));
+}
 
-    } else if (style === 'synth') {
-      const dur = b * pick([1, 2, 2]);
-      const gain = rand(0.14, 0.20);
-      for (const detune of [-8, 8]) {
-        const osc = ctx.createOscillator(), filt = ctx.createBiquadFilter(), env = ctx.createGain();
-        osc.type = 'sawtooth'; osc.frequency.value = hz; osc.detune.value = detune;
-        filt.type = 'lowpass'; filt.Q.value = 6;
-        filt.frequency.setValueAtTime(80, t);
-        filt.frequency.exponentialRampToValueAtTime(600, t + 0.06);
-        filt.frequency.exponentialRampToValueAtTime(180, t + dur * 0.7);
-        env.gain.setValueAtTime(0, t);
-        env.gain.linearRampToValueAtTime(gain / 2, t + 0.01);
-        env.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.9);
-        osc.connect(filt); filt.connect(env); env.connect(masterGain);
-        osc.start(t); osc.stop(t + dur);
-      }
-      return dur;
+function resolve(code, b, len) {
+  const seg = harmony.at(b);
+  const r   = root(seg);
+  if (b - seg.start < 1e-6) return r; // chord arrival always gets the root
+  if (code === 'A') return b + len >= seg.end - 1e-6 ? approach(nextRoot(seg), prev ?? r) : fifth(r);
+  if (code === 'F') return fifth(r);
+  if (code === 'O') return r + 12 <= HI + 5 ? r + 12 : r;
+  return r;
+}
 
-    } else { // rumble
-      const dur = b * pick([3, 4, 4, 6]);
-      const gain = rand(0.12, 0.18);
-      const osc = ctx.createOscillator(), sub = ctx.createOscillator();
-      const trem = ctx.createOscillator(), tremGain = ctx.createGain();
-      const env = ctx.createGain(), filt = ctx.createBiquadFilter();
-      osc.type  = 'square'; osc.frequency.value = hz;
-      sub.type  = 'sine';   sub.frequency.value = hz * 0.5;
-      trem.type = 'sine';   trem.frequency.value = rand(3, 6);
-      tremGain.gain.value = gain * 0.3;
-      filt.type = 'lowpass'; filt.frequency.value = 300; filt.Q.value = 1.5;
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain, t + 0.2);
-      env.gain.setValueAtTime(gain, t + dur - 0.6);
-      env.gain.linearRampToValueAtTime(0, t + dur);
-      trem.connect(tremGain); tremGain.connect(env.gain);
-      osc.connect(filt); sub.connect(filt); filt.connect(env); env.connect(masterGain);
-      osc.start(t); osc.stop(t + dur); sub.start(t); sub.stop(t + dur);
-      trem.start(t); trem.stop(t + dur);
-      return dur - 0.4;
-    }
+// Walking bass: steady quarters. Root on the chord's arrival, an approach
+// note on the last beat before a change, and in between chord tones (on
+// strong beats) or scale steps that head toward the next root without
+// reaching it early.
+function walkNote(b) {
+  const seg = harmony.at(b);
+  const k = b - seg.start, left = seg.end - b;
+  if (k < 1e-6 || prev === null) return root(seg);
+  const target = nextRoot(seg);
+  if (left <= 1 + 1e-6) return approach(target, prev);
+  const pcs = harmony.pcs(seg.degree, seg.seventh ? 4 : 3);
+  const options = [];
+  for (let m = prev - 5; m <= prev + 5; m++) {
+    if (m === prev || m < LO || m > HI) continue;
+    const chordTone = pcs.includes(m % 12);
+    if (!chordTone && !inScale(m)) continue;
+    let w = chordTone ? (Math.round(k) % 2 === 0 ? 4 : 2) : 1;
+    if (Math.abs(target - m) < Math.abs(target - prev)) w += 1.5;
+    if (m === target) w = 0.2;
+    options.push([m, w]);
+  }
+  let total = options.reduce((s, [, w]) => s + w, 0), r = Math.random() * total;
+  for (const [m, w] of options) if ((r -= w) <= 0) return m;
+  return root(seg);
+}
+
+// ─── Sounds ───────────────────────────────────────────────────────────────────
+function subBass(t, midi, dur) {
+  const hz = midiToHz(midi), end = t + dur + 0.1;
+  const lp = filter('lowpass', 320, 0.7);
+  osc('sine', hz, t, end).connect(lp);
+  const tri = osc('triangle', hz, t, end), triG = gain(0.5);
+  tri.connect(triG); triG.connect(lp);
+  if (hz / 2 >= 35) { // a sub-octave only where it's still audible
+    const s = osc('sine', hz / 2, t, end), sG = gain(0.5);
+    s.connect(sG); sG.connect(lp);
+  }
+  const env = gain(0);
+  ahr(env.gain, t, rand(0.09, 0.12), 0.03, dur - 0.06, 0.05);
+  lp.connect(env); env.connect(audio.dry);
+}
+
+function stringBass(t, midi, dur, { bright, pick: pos, t60, level }) {
+  const src = playBuffer(pluckBuffer(midi, { t60, bright, pick: pos, stretch: 0.5, length: Math.min(t60, dur + 0.2) }), t, t + dur + 0.2);
+  const lp = filter('lowpass', 1800, 0.7);
+  const env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(level, t + 0.004);
+  env.gain.setTargetAtTime(0, t + dur, 0.03);
+  src.connect(lp); lp.connect(env); env.connect(audio.dry);
+  // Finger/string thump under the attack.
+  const th = noise(t, 0.03), thLp = filter('lowpass', 220), thE = gain(0);
+  perc(thE.gain, t, level * 0.5, 0.02, 0.001);
+  th.connect(thLp); thLp.connect(thE); thE.connect(audio.dry);
+}
+
+function synthBass(t, midi, dur) {
+  const hz = midiToHz(midi), end = t + dur + 0.1;
+  const peak = rand(0.085, 0.11);
+  for (const detune of [-8, 8]) {
+    const o = osc('sawtooth', hz, t, end, detune);
+    const lp = filter('lowpass', 80, 6);
+    lp.frequency.setValueAtTime(80, t);
+    lp.frequency.exponentialRampToValueAtTime(600 + 500 * state.brightness, t + 0.03);
+    lp.frequency.exponentialRampToValueAtTime(180, t + Math.max(0.06, dur * 0.8));
+    const env = gain(0);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.006);
+    env.gain.setTargetAtTime(0, t + dur, 0.02);
+    o.connect(lp); lp.connect(env); env.connect(audio.dry);
+  }
+}
+
+function rumbleBass(t, midi, dur) {
+  const hz = midiToHz(midi), end = t + dur + 0.6;
+  const peak = rand(0.07, 0.09);
+  const lp = filter('lowpass', 300, 1.5);
+  osc('square', hz, t, end).connect(lp);
+  if (hz / 2 >= 35) osc('sine', hz / 2, t, end).connect(lp);
+  const env = gain(0);
+  ahr(env.gain, t, peak, 0.2, dur - 0.1, 0.5);
+  const trem = osc('sine', rand(3, 6), t, end), tremG = gain(peak * 0.3);
+  trem.connect(tremG); tremG.connect(env.gain);
+  lp.connect(env); env.connect(audio.dry);
+}
+
+// ─── Scheduling ───────────────────────────────────────────────────────────────
+function play(t, b) {
+  const bar = Math.floor(b / 4 + 1e-9), pos = b - bar * 4;
+  if (bar !== curBar) {
+    curBar = bar;
+    if (Math.random() < 0.3) cell = pick(PLUCK_RHYTHMS);
+    if (Math.random() < 0.15) pattern = pick(SYNTH_PATTERNS);
   }
 
-  return {
-    name: 'bass',
-    get style() { return style; },
-    reroll() { style = pick(STYLES); },
-    setStyle(s) { style = s; },
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += playNote(nextTime);
+  if (style === 'sub' || style === 'rumble') {
+    const seg = harmony.at(b), len = seg.end - b;
+    prev = root(seg);
+    (style === 'sub' ? subBass : rumbleBass)(t, prev, len * beat());
+    return len;
+  }
+
+  if (style === 'walking') {
+    prev = walkNote(b);
+    stringBass(t, prev, beat() * 0.95, { bright: 0.22, pick: 0.28, t60: 1.2, level: 0.5 });
+    return 1;
+  }
+
+  if (style === 'plucked') {
+    let acc = 0;
+    for (const [len, code] of cell) {
+      if (Math.abs(acc - pos) < 1e-6) {
+        const midi = resolve(code, b, len);
+        prev = midi;
+        stringBass(t, midi, len * beat() * 0.9, { bright: 0.4, pick: 0.18, t60: 1.6, level: 0.42 });
+        return len;
       }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+      if (acc > pos) return acc - pos;
+      acc += len;
+    }
+    return 4 - pos;
+  }
+
+  // synth: one sixteenth step at a time
+  const i = Math.round(pos * 4) % 16, ch = pattern[i];
+  if (ch !== '.' && ch !== '-') {
+    let n = 1;
+    while (i + n < 16 && pattern[i + n] === '-') n++;
+    const midi = resolve(ch, b, n / 4);
+    prev = midi;
+    synthBass(t, midi, (n / 4) * beat() * 0.9);
+  }
+  return 0.25;
+}
+
+const voice = createVoice('bass', play, { onReset: () => { prev = null; curBar = -1; } });
+
+export const bassVoice = {
+  ...voice,
+  get style() { return style; },
+  reroll() { style = pick(STYLES); cell = pick(PLUCK_RHYTHMS); pattern = pick(SYNTH_PATTERNS); },
+  setStyle(s) { style = s; },
+};

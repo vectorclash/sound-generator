@@ -1,45 +1,46 @@
 import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { beat, rand, fold, register } from '../../state.js';
+import { createVoice } from '../transport.js';
 import { harmony } from '../harmony.js';
+import { gain, send, pluckBuffer, playBuffer } from '../synth.js';
 
-export const pluckVoice = (() => {
-  let nextTime = 0;
+// Fingerpicked steel-string guitar (Travis picking). The thumb alternates
+// root and fifth in the bass on each beat; the fingers pick upper chord tones
+// on the off-beats; beat one is sometimes a "pinch" (thumb + finger). Strings
+// are a Karplus–Strong model plucked near the bridge. (The old pluck was
+// band-passed white noise and measured ~25 dB quieter than everything else.)
+const FINGER_ORDER = [2, 1, 2, 0];
+let upperPrev = null;
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('pluck').dry;
-    if (Math.random() < 0.15) return beat() * pick([0.5, 1]);
+function string(t, midi, level, ring) {
+  const src = playBuffer(pluckBuffer(midi, { t60: ring, bright: 0.62, pick: 0.13, stretch: 0.45, length: ring }), t, t + ring);
+  const g = gain(level);
+  src.connect(g);
+  g.connect(getVoiceBus('pluck').dry);
+  send(g, audio.reverbSend, 0.32);
+}
 
-    const notes = scaleNotes(state.rootBase + 24, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
-    const hz    = midiToHz(harmony.pickChordTone(notes));
-    const dur   = rand(0.4, 1.2);
-    const gain  = rand(0.1, 0.18);
+function play(t, b) {
+  const seg  = harmony.at(b);
+  const pcs  = harmony.pcs(seg.degree, 3);
+  const i    = Math.round((b - Math.floor(b / 4) * 4) * 2) % 8; // eighth within the bar
+  const ring = Math.min(2.2, beat() * 4);
 
-    // Noise burst through a narrow bandpass — simulates a plucked string body
-    const buf  = ctx.createBuffer(1, ctx.sampleRate * 0.08, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const bp  = ctx.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = hz; bp.Q.value = 28;
-    const env = ctx.createGain(), wet = ctx.createGain();
-    env.gain.setValueAtTime(gain, t);
-    env.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    wet.gain.value = 0.5;
-    src.connect(bp); bp.connect(env);
-    env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-    src.start(t); src.stop(t + dur + 0.05);
-    return beat() * pick([0.5, 0.5, 1, 1, 1.5]);
+  if (i % 2 === 0) {
+    const bassRoot = fold(harmony.degreeNear(seg.degree, register(0, 40, 52)), 40, 52);
+    const fifth    = fold(bassRoot + ((pcs[2] - pcs[0] + 12) % 12), bassRoot + 1, bassRoot + 12);
+    string(t, (i / 2) % 2 === 0 ? bassRoot : fifth, rand(0.19, 0.23), ring);
+    if (i === 0 && Math.random() < 0.4) string(t, upper(pcs)[2], rand(0.13, 0.16), ring);
+  } else if (Math.random() > 0.12) {
+    const up = upper(pcs);
+    string(t, up[FINGER_ORDER[((i - 1) / 2) % 4]], rand(0.12, 0.16), ring * 0.8);
   }
+  return 0.5;
+}
 
-  return {
-    name: 'pluck',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+function upper(pcs) {
+  upperPrev = harmony.voice(pcs, upperPrev, register(24, 58, 70));
+  return upperPrev;
+}
+
+export const pluckVoice = createVoice('pluck', play, { entry: 4, role: 'motion', onReset: () => { upperPrev = null; } });

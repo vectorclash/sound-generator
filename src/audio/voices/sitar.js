@@ -1,107 +1,56 @@
 import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
-import { harmony } from '../harmony.js';
+import { state, beat, rand, register, fold, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
+import { osc, gain, filter, send, shaper, pluckBuffer, playBuffer } from '../synth.js';
 
-export const sitarVoice = (() => {
-  let nextTime = 0;
-  let lastMidi = -1;
+// Sitar: a bright plucked string (Karplus–Strong, plucked near the bridge),
+// through a gently asymmetric waveshaper and a presence band — the buzzing
+// "jawari" bridge that makes the sitar's tone bloom with upper harmonics.
+// Meend: when the previous note is close, the new note is plucked at the old
+// pitch and pulled to the new one, as a sitarist bends the string sideways.
+// Sympathetic (tarab) strings ring quietly when the played note matches them.
+const phraser = createPhraser({ name: 'sitar', base: () => register(24, 48, 62), lead: true });
+let prev = null;
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('sitar').dry;
-    if (Math.random() < 0.18) return beat() * pick([0.5, 1]);
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
 
-    const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes = scaleNotes(state.rootBase + 24, scale, 2);
-    let midi;
-    if (lastMidi > 0 && Math.random() < 0.55) {
-      const idx = notes.indexOf(lastMidi);
-      if (idx >= 0) midi = notes[Math.max(0, Math.min(notes.length - 1, idx + pick([-2, -1, 1, 2])))];
-    }
-    if (!midi) midi = harmony.pickChordTone(notes);
-    lastMidi = midi;
+  const bus  = getVoiceBus('sitar').dry;
+  const midi = ev.midi;
+  const dur  = ev.dur * beat();
+  const ring = Math.min(3, dur + 1.6);
+  const peak = 0.6 * ev.vel;
 
-    const hz   = midiToHz(midi);
-    const dur  = beat() * pick([1, 1.5, 2]);
-    const gain = rand(0.10, 0.16);
-
-    // ── Pluck transient: bandpass noise gives the initial "ping" ───────────
-    const bufLen = Math.ceil(ctx.sampleRate * 0.055);
-    const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-    const data   = buf.getChannelData(0);
-    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-    const src  = ctx.createBufferSource(); src.buffer = buf;
-    const bpf  = ctx.createBiquadFilter();
-    bpf.type = 'bandpass'; bpf.frequency.value = hz * 2; bpf.Q.value = 18;
-    const tEnv = ctx.createGain();
-    tEnv.gain.setValueAtTime(gain * 1.4, t);
-    tEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
-    src.connect(bpf); bpf.connect(tEnv); tEnv.connect(masterGain);
-    src.start(t); src.stop(t + 0.06);
-
-    // ── Additive harmonics — high partials decay fast, fundamental rings on ─
-    // Meend: start slightly sharp, all harmonics slide together
-    const slideFrom = hz * Math.pow(2, rand(0.5, 1.1) / 12);
-
-    [
-      [1, 0.90, dur],
-      [2, 0.44, dur * 0.48],
-      [3, 0.26, dur * 0.28],
-    ].forEach(([n, amp, hdur]) => {
-      const osc = ctx.createOscillator();
-      const env = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(slideFrom * n, t);
-      osc.frequency.exponentialRampToValueAtTime(hz * n, t + 0.045);
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain * amp, t + 0.008);
-      env.gain.exponentialRampToValueAtTime(0.001, t + hdur);
-      osc.connect(env); env.connect(masterGain);
-      if (n === 1) {
-        const wet = ctx.createGain(); wet.gain.value = 0.22;
-        env.connect(wet); wet.connect(reverbNode);
-      }
-      osc.start(t); osc.stop(t + hdur + 0.1);
-    });
-
-    // ── Jawari beat — detuned fundamental creates the characteristic shimmer ─
-    const jaw    = ctx.createOscillator();
-    const jawEnv = ctx.createGain();
-    jaw.type = 'sine';
-    jaw.frequency.setValueAtTime(slideFrom * 1.003, t);
-    jaw.frequency.exponentialRampToValueAtTime(hz * 1.003, t + 0.045);
-    jawEnv.gain.setValueAtTime(0, t);
-    jawEnv.gain.linearRampToValueAtTime(gain * 0.38, t + 0.01);
-    jawEnv.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.55);
-    jaw.connect(jawEnv); jawEnv.connect(masterGain);
-    jaw.start(t); jaw.stop(t + dur * 0.55 + 0.1);
-
-    // ── Sympathetic strings — bloom one by one after the pluck ─────────────
-    scaleNotes(state.rootBase + 12, scale, 1).slice(0, 5).forEach((sm, i) => {
-      const s  = ctx.createOscillator();
-      const se = ctx.createGain();
-      s.type = 'sine';
-      s.frequency.value = midiToHz(sm);
-      se.gain.setValueAtTime(0, t);
-      se.gain.linearRampToValueAtTime(gain * 0.055, t + 0.06 + i * 0.018);
-      se.gain.exponentialRampToValueAtTime(0.001, t + dur + rand(0.6, 1.8));
-      s.connect(se); se.connect(masterGain);
-      const sw = ctx.createGain(); sw.gain.value = 0.4;
-      se.connect(sw); sw.connect(reverbNode);
-      s.start(t); s.stop(t + dur + 2.2);
-    });
-
-    return beat() * pick([0.5, 1, 1, 1.5]);
+  const src = playBuffer(pluckBuffer(midi, { t60: 2.8, bright: 0.85, pick: 0.07, stretch: 0.35, length: ring }), t, t + ring);
+  if (prev !== null && prev !== midi && Math.abs(prev - midi) <= 4 && Math.random() < 0.55) {
+    src.detune.setValueAtTime((prev - midi) * 100, t);
+    src.detune.setValueAtTime((prev - midi) * 100, t + 0.04);
+    src.detune.linearRampToValueAtTime(0, t + rand(0.12, 0.2));
   }
+  prev = midi;
 
-  return {
-    name: 'sitar',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; lastMidi = -1; },
-  };
-})();
+  const env = gain(peak);
+  src.connect(env);
+  const buzz = shaper(3, 0.2), band = filter('bandpass', 2800, 0.9), buzzG = gain(0.32);
+  src.connect(buzz); buzz.connect(band); band.connect(buzzG); buzzG.connect(env);
+  env.connect(bus);
+  send(env, audio.reverbSend, 0.25);
+
+  // Tarab strings tuned to the tonic and the scale: the played pitch class
+  // excites its sympathetic string an octave up, along with the tonic.
+  const tonic = fold(state.rootMidi, 60, 71);
+  for (const m of new Set([fold(midi, 60, 71), tonic])) {
+    const s  = osc('sine', midiToHz(m), t, t + ring + 1.2);
+    const se = gain(0);
+    se.gain.setValueAtTime(0, t);
+    se.gain.linearRampToValueAtTime(peak * 0.06, t + 0.12);
+    se.gain.exponentialRampToValueAtTime(peak * 6e-5, t + ring + 1.1);
+    s.connect(se); se.connect(bus);
+    send(se, audio.reverbSend, 0.4);
+  }
+  return ev.gap;
+}
+
+export const sitarVoice = createVoice('sitar', play, { entry: 4, role: 'lead', onReset: () => { phraser.reset(); prev = null; } });

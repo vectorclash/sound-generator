@@ -1,77 +1,50 @@
-import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
-import { harmony } from '../harmony.js';
+import { audio, getVoiceBus, noise } from '../context.js';
+import { beat, pick, clamp, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
+import { osc, gain, filter, send, lfo, perc } from '../synth.js';
 
-export const vibraphoneVoice = (() => {
-  let nextTime = 0;
-  let lastMidi = -1;
+// Vibraphone: tuned aluminium bars. The bars are cut so their first overtone
+// sits two octaves up (4×) and the next near 10× — not the 2.76× of an
+// untuned bar, which the old version used and which rang out of tune against
+// the chords. The motor-driven discs in the resonators give the pulsing
+// tremolo; the pedal lets notes ring past their written length.
+const phraser = createPhraser({ name: 'vibraphone', base: () => register(36, 53, 70), lead: true });
+let motor = 5.5;
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('vibraphone').dry;
-    if (Math.random() < 0.15) return beat() * pick([0.5, 1]);
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
 
-    const scale = SCALES[SCALE_NAMES[state.scaleIdx]];
-    const notes = scaleNotes(state.rootBase + 36, scale, 2);
-    let midi;
-    if (lastMidi > 0 && Math.random() < 0.65) {
-      const idx = notes.indexOf(lastMidi);
-      if (idx >= 0) midi = notes[Math.max(0, Math.min(notes.length - 1, idx + pick([-2, -1, 1, 2])))];
-    }
-    if (!midi) midi = harmony.pickChordTone(notes);
-    lastMidi = midi;
+  const bus  = getVoiceBus('vibraphone').dry;
+  const hz   = midiToHz(ev.midi);
+  const ring = clamp(ev.dur * beat() * 1.6 + 0.8, 1, 4.5 * Math.sqrt(300 / hz));
+  const peak = 0.22 * ev.vel;
+  const end  = t + ring + 0.05;
 
-    const hz        = midiToHz(midi);
-    const dur       = beat() * pick([1, 1.5, 2, 2]);
-    const gain      = rand(0.07, 0.12);
-    const decayTime = dur * 1.8 + rand(0.4, 0.9);
+  const trem = gain(1);
+  if (motor) lfo(motor, 0.22, t, end).connect(trem.gain);
 
-    // Fundamental sine through tremolo → envelope
-    const osc     = ctx.createOscillator();
-    const tremolo = ctx.createGain();
-    const env     = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = hz;
-    tremolo.gain.value = 1.0;
-    env.gain.setValueAtTime(gain, t);
-    env.gain.exponentialRampToValueAtTime(0.001, t + decayTime);
-
-    // Motor LFO (~6 Hz amplitude tremolo)
-    const lfo     = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.frequency.value = 5.8 + rand(-0.4, 0.4);
-    lfoGain.gain.value  = 0.09;
-    lfo.connect(lfoGain);
-    lfoGain.connect(tremolo.gain);
-
-    // Inharmonic metallic partial — decays much faster
-    const osc2 = ctx.createOscillator();
-    const env2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.value = hz * 2.756;
-    env2.gain.setValueAtTime(gain * 0.12, t);
-    env2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-
-    osc.connect(tremolo); tremolo.connect(env); env.connect(masterGain);
-    osc2.connect(env2); env2.connect(masterGain);
-    const wet = ctx.createGain(); wet.gain.value = 0.32;
-    env.connect(wet); wet.connect(reverbNode);
-
-    lfo.start(t); lfo.stop(t + decayTime + 0.05);
-    osc.start(t); osc.stop(t + decayTime + 0.05);
-    osc2.start(t); osc2.stop(t + 0.25);
-
-    return beat() * pick([0.5, 1, 1, 1.5]);
+  for (const [ratio, level, decay] of [[1, 1, 1], [3.98, 0.22, 0.28], [9.95, 0.06, 0.07]]) {
+    const o = osc('sine', hz * ratio, t, end);
+    const e = gain(0);
+    perc(e.gain, t, peak * level, ring * decay);
+    o.connect(e); e.connect(trem);
   }
+  // Soft mallet contact.
+  const tick = noise(t, 0.02);
+  const tickLp = filter('lowpass', 3500);
+  const tickE = gain(0);
+  perc(tickE.gain, t, peak * 0.25, 0.012, 0.001);
+  tick.connect(tickLp); tickLp.connect(tickE); tickE.connect(bus);
 
-  return {
-    name: 'vibraphone',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; lastMidi = -1; },
-  };
-})();
+  trem.connect(bus);
+  send(trem, audio.reverbSend, 0.35);
+  send(trem, audio.echoSend, 0.08);
+  return ev.gap;
+}
+
+export const vibraphoneVoice = createVoice('vibraphone', play, {
+  entry: 4, role: 'lead',
+  onReset: () => { phraser.reset(); motor = pick([0, 3.8, 5.5, 5.5]); },
+});

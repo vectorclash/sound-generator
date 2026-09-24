@@ -1,49 +1,49 @@
 import { audio, getVoiceBus } from '../context.js';
-import { state, LOOKAHEAD, beat, rand, pick, lerp, midiToHz } from '../../state.js';
+import { state, beat, rand, lerp, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
 import { harmony } from '../harmony.js';
+import { osc, gain, filter, send, lfo, ahr } from '../synth.js';
 
-export const stringsVoice = (() => {
-  let nextTime = 0;
+// String section: three detuned saws per note for ensemble width, a lowpass
+// that opens as bow pressure builds, and — the thing that makes synthetic
+// strings read as *strings* — vibrato on every note, slightly different in
+// rate per player, faded in after the bow has started. Chord-synchronous and
+// voice-led like the pad.
+let prev = null;
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('strings').dry;
-    const chord  = harmony.chordMidis(state.rootBase + 12, 3);
-    const dur    = beat() * pick([4, 6, 8]);
-    const gain   = rand(0.07, 0.11);
+function play(t, b) {
+  const seg  = harmony.at(b);
+  const len  = seg.end - b;
+  const dur  = len * beat();
+  const pcs  = harmony.pcs(seg.degree, seg.seventh ? 4 : 3);
+  const v    = harmony.voice(pcs, prev, register(16, 50, 70));
+  prev = v;
 
-    for (const midi of chord) {
-      const hz = midiToHz(midi);
-      // Three detuned saws — width gives the ensemble string texture
-      for (const detune of [-10, 0, 10]) {
-        const osc  = ctx.createOscillator(), filt = ctx.createBiquadFilter();
-        const env  = ctx.createGain(),       wet  = ctx.createGain();
-        osc.type = 'sawtooth'; osc.frequency.value = hz; osc.detune.value = detune + rand(-3, 3);
-        filt.type = 'lowpass'; filt.Q.value = 0.8;
-        // Filter opens slowly — simulates bow pressure building
-        filt.frequency.setValueAtTime(300, t);
-        filt.frequency.linearRampToValueAtTime(lerp(800, 2800, state.brightness), t + dur * 0.4);
-        env.gain.setValueAtTime(0, t);
-        env.gain.linearRampToValueAtTime(gain / 3, t + dur * 0.35);
-        env.gain.setValueAtTime(gain / 3, t + dur - 1.2);
-        env.gain.linearRampToValueAtTime(0, t + dur);
-        wet.gain.value = lerp(0.3, 0.8, state.spaciousness);
-        osc.connect(filt); filt.connect(env);
-        env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-        osc.start(t); osc.stop(t + dur + 0.1);
-      }
+  const bus    = getVoiceBus('strings').dry;
+  const peak   = rand(0.12, 0.155) * 3 / v.length;
+  const attack = Math.min(1.2, dur * 0.35);
+  const end    = t + dur + 1.2;
+
+  const lp = filter('lowpass', 300, 0.7);
+  lp.frequency.setValueAtTime(300, t);
+  lp.frequency.linearRampToValueAtTime(lerp(900, 3200, state.brightness), t + attack + 0.3);
+  const hp = filter('highpass', 110, 0.7);
+
+  for (const midi of v) {
+    const hz  = midiToHz(midi);
+    const vib = lfo(rand(5.0, 5.9), rand(7, 11), t, end, attack * 0.8, 0.5); // cents
+    for (const d of [-10, 0, 10]) {
+      const o = osc('sawtooth', hz, t, end, d + rand(-3, 3));
+      vib.connect(o.detune);
+      o.connect(lp);
     }
-    return dur - 0.8;
   }
+  const env = gain(0);
+  ahr(env.gain, t, peak / 3, attack, dur, 1.0);
+  lp.connect(hp); hp.connect(env);
+  env.connect(bus);
+  send(env, audio.reverbSend, lerp(0.3, 0.8, state.spaciousness));
+  return len;
+}
 
-  return {
-    name: 'strings',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+export const stringsVoice = createVoice('strings', play, { role: 'bed', onReset: () => { prev = null; } });

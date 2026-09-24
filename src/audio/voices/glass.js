@@ -1,46 +1,34 @@
 import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
+import { currentScale, rand, pick, register, midiToHz, scaleNotes } from '../../state.js';
+import { createVoice } from '../transport.js';
 import { harmony } from '../harmony.js';
+import { osc, gain, send } from '../synth.js';
 
-export const glassVoice = (() => {
-  let nextTime = 0;
+// Glass harmonica: a rubbed glass rim. An almost pure tone that swells in
+// slowly, with a second partial a hertz or two away — the audible beating
+// that gives rubbed glass its shimmer — and faint upper harmonics. (The old
+// "FM" version used a modulation index of 0.012, i.e. a plain sine.)
+function play(t, b) {
+  const wait = pick([2, 3, 4, 5]);
+  if (Math.random() < 0.35) return wait;
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('glass').dry;
-    const wait = beat() * rand(2, 5);
-    if (Math.random() < 0.35) return wait;
+  const notes = scaleNotes(register(36, 62, 79), currentScale(), 2);
+  const hz    = midiToHz(harmony.pickChordTone(notes, b));
+  const dur   = rand(3.0, 7.0);
+  const peak  = rand(0.11, 0.16);
+  const bus   = getVoiceBus('glass').dry;
 
-    const notes = scaleNotes(state.rootBase + 36, SCALES[SCALE_NAMES[state.scaleIdx]], 2);
-    const hz   = midiToHz(harmony.pickChordTone(notes));
-    const dur  = rand(3.0, 7.0);
-    const gain = rand(0.06, 0.10);
-
-    // FM: modulator at 1.003x creates subtle beating shimmer
-    const mod = ctx.createOscillator(), modGain = ctx.createGain();
-    const car = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
-    mod.type = 'sine'; mod.frequency.value = hz * 1.003;
-    modGain.gain.value = hz * 0.012;
-    mod.connect(modGain); modGain.connect(car.frequency);
-    car.type = 'sine'; car.frequency.value = hz;
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(gain, t + 0.3);
-    env.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    wet.gain.value = 0.95;
-    car.connect(env); env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-    mod.start(t); mod.stop(t + dur + 0.1);
-    car.start(t); car.stop(t + dur + 0.1);
-    return wait;
+  const env = gain(0);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(peak, t + rand(0.35, 0.6));
+  env.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur);
+  for (const [f, level] of [[hz, 0.62], [hz + rand(1, 2.2), 0.38], [hz * 2, 0.07], [hz * 3, 0.025]]) {
+    const o = osc('sine', f, t, t + dur + 0.05), g = gain(level);
+    o.connect(g); g.connect(env);
   }
+  env.connect(bus);
+  send(env, audio.reverbSend, 0.95);
+  return wait;
+}
 
-  return {
-    name: 'glass',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+export const glassVoice = createVoice('glass', play, { role: 'air' });

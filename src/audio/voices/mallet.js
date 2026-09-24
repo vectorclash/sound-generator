@@ -1,43 +1,38 @@
-import { audio, getVoiceBus } from '../context.js';
-import { state, SCALES, SCALE_NAMES, LOOKAHEAD, beat, rand, pick, midiToHz, scaleNotes } from '../../state.js';
-import { harmony } from '../harmony.js';
+import { audio, getVoiceBus, noise } from '../context.js';
+import { clamp, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
+import { createPhraser } from '../phrase.js';
+import { osc, gain, filter, send, perc } from '../synth.js';
 
-export const malletVoice = (() => {
-  let nextTime = 0;
+// Marimba: rosewood bars tuned so the first overtone is two octaves up (4×)
+// and the next near 10× — the old version used 1:2:4, an octave that a
+// marimba bar doesn't have. Low bars ring longer than high ones, and a soft
+// yarn-mallet thump sits under the attack. Plays ostinato figures.
+const phraser = createPhraser({ name: 'mallet', base: () => register(24, 45, 62), style: 'active', ostinato: true, repeat: 0.8 });
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('mallet').dry;
-    if (Math.random() < 0.2) return beat() * pick([0.5, 1]);
+function play(t, b) {
+  const ev = phraser.next(b);
+  if (ev.midi === null) return ev.gap;
 
-    const notes = scaleNotes(state.rootBase + 24, SCALES[SCALE_NAMES[state.scaleIdx]], 3);
-    const hz   = midiToHz(harmony.pickChordTone(notes));
-    const dur  = rand(0.3, 0.9);
-    const gain = rand(0.09, 0.16);
+  const bus   = getVoiceBus('mallet').dry;
+  const hz    = midiToHz(ev.midi);
+  const peak  = 0.32 * ev.vel;
+  const decay = clamp(0.4 * Math.pow(400 / hz, 0.6), 0.18, 1.4);
 
-    // Fundamental + octave with faster decay (marimba body)
-    // Fundamental + octave + 4th harmonic (marimba resonators emphasise this partial)
-    for (const [ratio, gMul, decayMul] of [[1, 1, 1], [2, 0.5, 0.4], [4, 0.18, 0.12]]) {
-      const osc = ctx.createOscillator(), env = ctx.createGain(), wet = ctx.createGain();
-      osc.type = 'sine'; osc.frequency.value = hz * ratio;
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain * gMul, t + 0.004);
-      env.gain.exponentialRampToValueAtTime(0.001, t + dur * decayMul);
-      wet.gain.value = 0.45;
-      osc.connect(env); env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-      osc.start(t); osc.stop(t + dur + 0.05);
-    }
-    return beat() * pick([0.5, 0.5, 1, 1]);
+  const out = gain(1);
+  for (const [ratio, level, d] of [[1, 1, 1], [3.93, 0.2, 0.22], [9.4, 0.05, 0.07]]) {
+    if (hz * ratio > 16000) continue;
+    const o = osc('sine', hz * ratio, t, t + decay + 0.05), e = gain(0);
+    perc(e.gain, t, peak * level, decay * d);
+    o.connect(e); e.connect(out);
   }
+  const th = noise(t, 0.02), thLp = filter('lowpass', 1200), thE = gain(0);
+  perc(thE.gain, t, peak * 0.3, 0.012, 0.001);
+  th.connect(thLp); thLp.connect(thE); thE.connect(out);
 
-  return {
-    name: 'mallet',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+  out.connect(bus);
+  send(out, audio.reverbSend, 0.4);
+  return ev.gap;
+}
+
+export const malletVoice = createVoice('mallet', play, { entry: 4, role: 'motion', onReset: phraser.reset });

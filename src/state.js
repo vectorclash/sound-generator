@@ -1,7 +1,4 @@
 // ─── Musical constants ────────────────────────────────────────────────────────
-export const SEMITONE = Math.pow(2, 1 / 12);
-export const C2 = 65.406;
-
 export const SCALES = {
   aeolian:    [0, 2, 3, 5, 7, 8, 10],
   dorian:     [0, 2, 3, 5, 7, 9, 10],
@@ -15,8 +12,10 @@ export const SCALE_NAMES = Object.keys(SCALES);
 
 // ─── Shared mutable state ─────────────────────────────────────────────────────
 // All modules import this same object reference and see each other's mutations.
+// Pitches are standard MIDI note numbers (60 = middle C, 69 = A4 = 440 Hz).
+export const ROOT_BASE_MIDI = 48; // C3 — rootMidi always stays within C3…B3
 export const state = {
-  rootMidi:    36,
+  rootMidi:    ROOT_BASE_MIDI,
   octaveShift: 0,
   scaleIdx:    0,
   tempo:       88,
@@ -37,11 +36,14 @@ export const TICK_MS   = 60;   // milliseconds
 export function rand(a, b)  { return a + Math.random() * (b - a); }
 export function pick(arr)   { return arr[Math.floor(Math.random() * arr.length)]; }
 export function lerp(a, b, t) { return a + (b - a) * t; }
+export function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 
 // ─── Music helpers ────────────────────────────────────────────────────────────
-export function midiToHz(midi) { return C2 * Math.pow(SEMITONE, midi - 24); }
+export function midiToHz(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
 
 export function beat() { return 60 / state.tempo; }
+
+export function currentScale() { return SCALES[SCALE_NAMES[state.scaleIdx]]; }
 
 export function scaleNotes(rootMidi, scaleIntervals, octaves = 3) {
   const notes = [];
@@ -50,6 +52,19 @@ export function scaleNotes(rootMidi, scaleIntervals, octaves = 3) {
   }
   return notes;
 }
+
+// Move `midi` by whole octaves until it sits inside [lo, hi].
+export function fold(midi, lo, hi) {
+  while (midi < lo) midi += 12;
+  while (midi > hi) midi -= 12;
+  return midi;
+}
+
+// Register (tonic note) for a voice: `offset` semitones above the global root,
+// folded into the range the instrument can actually sound in. The octave
+// control still moves every voice, but can't push a bass below hearing or a
+// bell into an ear-piercing register.
+export function register(offset, lo, hi) { return fold(state.rootBase + offset, lo, hi); }
 
 export function scaleName() { return SCALE_NAMES[state.scaleIdx]; }
 

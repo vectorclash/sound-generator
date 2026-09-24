@@ -1,45 +1,43 @@
 import { audio, getVoiceBus } from '../context.js';
-import { state, LOOKAHEAD, beat, rand, pick, lerp, midiToHz } from '../../state.js';
+import { state, beat, rand, lerp, register, midiToHz } from '../../state.js';
+import { createVoice } from '../transport.js';
 import { harmony } from '../harmony.js';
+import { osc, gain, filter, send, lfo, ahr } from '../synth.js';
 
-export const padVoice = (() => {
-  let nextTime = 0;
+// Analogue-style pad. Chords change exactly on the harmonic rhythm and are
+// voice-led (each note moves to the nearest tone of the next chord), so the
+// pad glides between chords instead of jumping in parallel blocks — and never
+// holds the old chord over the new one. Each note is a detuned saw pair; one
+// shared lowpass breathes slowly so a held chord doesn't sit static.
+let prev = null;
 
-  function play(t) {
-    const { ctx, reverbNode } = audio;
-    const masterGain = getVoiceBus('pad').dry;
-    const chord  = harmony.chordMidis(state.rootBase + 12, 3);
-    const dur    = beat() * pick([3, 4, 6, 8]);
-    const gain   = rand(0.06, 0.12);
+function play(t, b) {
+  const seg  = harmony.at(b);
+  const len  = seg.end - b;
+  const dur  = len * beat();
+  const pcs  = harmony.pcs(seg.degree, seg.seventh ? 4 : 3);
+  const v    = harmony.voice(pcs, prev, register(16, 52, 72));
+  prev = v;
 
-    for (const midi of chord) {
-      const hz   = midiToHz(midi);
-      const osc  = ctx.createOscillator(), filt = ctx.createBiquadFilter();
-      const env  = ctx.createGain(),       wet  = ctx.createGain();
-      osc.type = 'sawtooth'; osc.frequency.value = hz; osc.detune.value = rand(-8, 8);
-      filt.type = 'lowpass'; filt.frequency.value = lerp(400, 2400, state.brightness); filt.Q.value = 1.2;
-      const attackEnd = t + 0.8;
-      const sustainAt = t + Math.max(0.8, dur - 1.0);
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(gain, attackEnd);
-      env.gain.setValueAtTime(gain, sustainAt);
-      env.gain.linearRampToValueAtTime(0, t + dur);
-      wet.gain.value = lerp(0.2, 0.8, state.spaciousness);
-      osc.connect(filt); filt.connect(env);
-      env.connect(masterGain); env.connect(wet); wet.connect(reverbNode);
-      osc.start(t); osc.stop(t + dur + 0.1);
-    }
-    return dur - 0.5;
+  const bus    = getVoiceBus('pad').dry;
+  const peak   = rand(0.075, 0.1) * 3 / v.length;
+  const attack = Math.min(0.8, dur * 0.4);
+  const end    = t + dur + 1.0;
+
+  const cutoff = lerp(400, 2400, state.brightness);
+  const lp = filter('lowpass', cutoff, 1.1);
+  lfo(rand(0.08, 0.16), cutoff * 0.22, t, end).connect(lp.frequency);
+
+  for (const midi of v) {
+    const hz = midiToHz(midi);
+    for (const d of [-7, 7]) osc('sawtooth', hz, t, end, d + rand(-2, 2)).connect(lp);
   }
+  const env = gain(0);
+  ahr(env.gain, t, peak, attack, dur, 0.9);
+  lp.connect(env);
+  env.connect(bus);
+  send(env, audio.reverbSend, lerp(0.2, 0.8, state.spaciousness));
+  return len;
+}
 
-  return {
-    name: 'pad',
-    tick(now) {
-      while (nextTime < now + LOOKAHEAD) {
-        if (!nextTime) nextTime = now;
-        nextTime += play(nextTime);
-      }
-    },
-    reset(now) { nextTime = now; },
-  };
-})();
+export const padVoice = createVoice('pad', play, { role: 'bed', onReset: () => { prev = null; } });

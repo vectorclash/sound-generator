@@ -17,7 +17,9 @@ function animate(timestamp) {
   clock.update(timestamp);
 
   const t   = clock.getElapsed();
-  const hue = (state.rootMidi * 15 + state.era * 40) % 360;
+  // Each key keeps its colour: pitch class × 15°, offset so the palette
+  // matches what the keys looked like before pitches moved to standard MIDI.
+  const hue = ((state.rootMidi % 12) * 15 + 180 + state.era * 40) % 360;
 
   let energy = 0, bass = 0, fade = 0, freqData = zeroFreq;
 

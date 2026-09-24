@@ -1,7 +1,7 @@
-import { state, rootName, scaleName, TICK_MS, LOOKAHEAD, SCALE_NAMES, pick } from './state.js';
+import { state, rootName, scaleName, TICK_MS, LOOKAHEAD, ROOT_BASE_MIDI, pick } from './state.js';
 import { audio, initAudio } from './audio/context.js';
 import {
-  tick, pickVoices, setActiveVoices, resetTickTimer,
+  tick, pickVoices, setActiveVoices, startSession,
   bassVoice, padVoice, melodyVoice, textureVoice, pluckVoice,
   bellVoice, arpeggioVoice, malletVoice, droneVoice, fluteVoice,
   choirVoice, stringsVoice, rhodesVoice, organVoice, glassVoice,
@@ -10,7 +10,6 @@ import {
   activeVoices, eraTimer, ERA_DURATION,
 } from './audio/scheduler.js';
 import { startAnimation } from './visuals/animate.js';
-import { harmony } from './audio/harmony.js';
 
 // ─── Definitions ──────────────────────────────────────────────────────────────
 const ROOT_NAMES   = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -33,9 +32,17 @@ const GENRES = [
 ];
 
 const BASS_SUBTYPES  = ['sub','plucked','walking','synth','rumble'];
-const DRUMS_SUBTYPES = ['minimal','four_four','jungle','shuffle','trap','ghost','halftime','breakbeat','bossanova'];
+const DRUMS_SUBTYPES = [
+  'minimal','four_four','house','funk','boombap','breakbeat','jungle','garage','trap','halftime',
+  'shuffle','swing','brushes','bossanova','reggae','dembow','afro','cinematic','ghost',
+];
 const BASS_LABELS    = { sub:'SUB', plucked:'PLUCK', walking:'WALK', synth:'SYNTH', rumble:'RUMBLE' };
-const DRUMS_LABELS   = { minimal:'MINIMAL', four_four:'4/4', jungle:'JUNGLE', shuffle:'SHUFFLE', trap:'TRAP', ghost:'GHOST', halftime:'HALF TIME', breakbeat:'BREAK', bossanova:'BOSSA' };
+const DRUMS_LABELS   = {
+  minimal:'MINIMAL', four_four:'4/4', house:'HOUSE', funk:'FUNK', boombap:'BOOM BAP', breakbeat:'BREAK',
+  jungle:'JUNGLE', garage:'2-STEP', trap:'TRAP', halftime:'HALF TIME', shuffle:'SHUFFLE', swing:'SWING',
+  brushes:'BRUSHES', bossanova:'BOSSA', reggae:'ONE DROP', dembow:'DEMBOW', afro:'AFRO 12/8',
+  cinematic:'CINEMATIC', ghost:'GHOST',
+};
 
 const SIMPLE_VOICES = [
   { key:'pad',      voice:padVoice },
@@ -59,12 +66,19 @@ const SIMPLE_VOICES = [
   { key:'sitar',      voice:sitarVoice },
   { key:'kalimba',    voice:kalimbaVoice },
 ];
-// Canonical instrument order for binary encoding (must never change)
+// Canonical instrument order for the share-link bitmask. Spelled out rather
+// than derived from the display lists above, so reordering the UI can never
+// silently remap old links. Only ever append.
 const ALL_INST_KEYS = [
-  ...BASS_SUBTYPES.map(s => `bass:${s}`),
-  ...DRUMS_SUBTYPES.map(s => `drums:${s}`),
-  ...SIMPLE_VOICES.map(({ key }) => key),
-]; // 34 keys → 5 bytes as bitmask
+  'bass:sub','bass:plucked','bass:walking','bass:synth','bass:rumble',
+  'drums:minimal','drums:four_four','drums:jungle','drums:shuffle','drums:trap',
+  'drums:ghost','drums:halftime','drums:breakbeat','drums:bossanova',
+  'pad','melody','texture','pluck','bell','arpeggio','mallet','drone','flute','choir',
+  'strings','rhodes','organ','glass','harp','brass','vibraphone','clavinet','sitar','kalimba',
+  // added with the expanded drum machine
+  'drums:house','drums:funk','drums:boombap','drums:garage','drums:swing','drums:brushes',
+  'drums:reggae','drums:dembow','drums:afro','drums:cinematic',
+]; // 44 keys: bits 0–39 in bytes 6–10, bits 40+ in bytes 13+
 
 // ─── UI refs ──────────────────────────────────────────────────────────────────
 const startBtn        = document.getElementById('start-btn');
@@ -200,7 +214,7 @@ function randomize() {
   chordSlider.value       = chordBeats;
   chordVal.textContent    = chordBeats;
 
-  state.rootMidi     = 36 + root;
+  state.rootMidi     = ROOT_BASE_MIDI + root;
   state.scaleIdx     = scale;
   state.tempo        = bpm;
   state.octaveShift  = octave;
@@ -381,7 +395,7 @@ rootSelect.addEventListener('change',  clearGenreHighlight);
 function syncManualFromInfinite() {
   clearGenreHighlight();
 
-  rootSelect.value        = state.rootMidi - 36;
+  rootSelect.value        = state.rootMidi - ROOT_BASE_MIDI;
   scaleSelect.value       = state.scaleIdx;
   bpmSlider.value         = state.tempo;
   bpmValue.textContent    = bpmSlider.value;
@@ -459,7 +473,7 @@ panelToggleBtn.addEventListener('click', () => {
 
 // ─── Infinite mode ────────────────────────────────────────────────────────────
 function updateInfiniteDisplay() {
-  const prog       = Math.round((eraTimer / ERA_DURATION) * 100);
+  const prog       = Math.min(100, Math.round((eraTimer / ERA_DURATION) * 100));
   const voiceNames = [
     `bass(${bassVoice.style})`,
     ...activeVoices.map(v => v.style ? `${v.name}(${v.style})` : v.name),
@@ -492,29 +506,21 @@ startBtn.addEventListener('click', async () => {
   stateEl.classList.add('active');
 
   state.scaleIdx    = 0;
-  state.rootMidi    = 36;
+  state.rootMidi    = ROOT_BASE_MIDI;
   state.tempo       = Math.floor(Math.random() * 79) + 52; // 52–130
   state.octaveShift = pick([-3, -2, -1, 0, 0, 1]);
   state.harmonyLock = 0.78;
   state.chordBeats  = 4;
 
-  harmony.reroll();
   pickVoices();
   bassVoice.reroll();
+  drumsVoice.reroll();
 
-  // Reset tick timer and all voice schedulers so a re-start after stopping
-  // doesn't produce a stale-dt era jump or a catch-up note burst. Voice
-  // nextTimes are seeded LOOKAHEAD into the future (not bare "now") because
-  // the first real tick() doesn't land until the first setInterval fire —
-  // seeding at "now" leaves nextTime stale by then, so the first note's
-  // attack ramp lands entirely in the past and renders as an instant pop
-  // instead of a clean fade-in.
-  resetTickTimer();
-  const _now = audio.ctx.currentTime;
-  harmony.reset(_now);
-  const _scheduleFrom = _now + LOOKAHEAD;
-  bassVoice.reset(_scheduleFrom); drumsVoice.reset(_scheduleFrom);
-  SIMPLE_VOICES.forEach(({ voice }) => voice.reset(_scheduleFrom));
+  // Beat 0 is LOOKAHEAD into the future (not bare "now"): the first real
+  // tick() doesn't land until the first setInterval fire, and a clock that
+  // starts at "now" would put the first notes' attack ramps in the past —
+  // an instant pop instead of a clean fade-in.
+  startSession(audio.ctx.currentTime + LOOKAHEAD);
 
   infiniteRunning  = true;
   infiniteInterval = setInterval(() => {
@@ -542,7 +548,7 @@ async function manualInit() {
 
   state.tempo        = parseInt(bpmSlider.value, 10);
   state.octaveShift  = parseInt(octaveSlider.value, 10);
-  state.rootMidi     = 36 + parseInt(rootSelect.value, 10);
+  state.rootMidi     = ROOT_BASE_MIDI + parseInt(rootSelect.value, 10);
   state.scaleIdx     = parseInt(scaleSelect.value, 10);
   state.era          = 0;
   state.density      = parseFloat(densitySlider.value);
@@ -556,22 +562,12 @@ async function manualInit() {
 
   setActiveVoices(getManualVoices());
 
-  // Reset every voice scheduler to now so stale nextTime values don't cause
-  // a catch-up burst of past-timestamped notes on the first tick. Voice
-  // nextTimes are seeded LOOKAHEAD into the future, not bare "now" — the
-  // first real tick() doesn't run until the first setInterval fire (TICK_MS
-  // later), so by then a "now"-seeded nextTime is already stale and the
-  // first note's attack ramp ends up scheduled entirely in the past, which
-  // renders as an instant pop instead of a clean fade-in. This is the
-  // export "instruments pop in" bug, since export always starts from a
-  // fresh manualInit().
-  const now = audio.ctx.currentTime;
-  harmony.reroll();
-  harmony.reset(now);
-  const scheduleFrom = now + LOOKAHEAD;
-  bassVoice.reset(scheduleFrom);
-  drumsVoice.reset(scheduleFrom);
-  SIMPLE_VOICES.forEach(({ voice }) => voice.reset(scheduleFrom));
+  // Beat 0 sits LOOKAHEAD into the future, not bare "now" — the first real
+  // tick() doesn't run until the first setInterval fire (TICK_MS later), so
+  // a clock started at "now" would put the first notes' attack ramps in the
+  // past and they'd pop in instead of fading in. (This was the export
+  // "instruments pop in" bug, since export always starts from manualInit().)
+  startSession(audio.ctx.currentTime + LOOKAHEAD);
 }
 
 function buildExportName(ext) {
@@ -844,22 +840,24 @@ document.querySelectorAll('.section-header').forEach(header => {
 });
 
 // ─── Share / restore config via URL hash ─────────────────────────────────────
-// Binary pack: 13 bytes → 18 base64url chars
+// Binary pack: 14 bytes → 19 base64url chars
 // [rootOffset(1), scale(1), tempo(1), density×100(1), brightness×100(1),
-//  spaciousness×100(1), instBitmask(5 bytes, 34 bits),
-//  harmonyLock×100(1), chordBeats(1)]
-// The last two bytes were added later; older 11-byte links still decode (the
-// new fields come back undefined and fall back to current/default values).
+//  spaciousness×100(1), instBitmask bits 0–39 (5 bytes),
+//  harmonyLock×100(1), chordBeats(1), instBitmask bits 40–47 (1 byte)]
+// Fields were appended over time; older 11- and 13-byte links still decode
+// (missing fields fall back to current/default values).
+const instByte = i => (i < 40 ? 6 + (i >> 3) : 13 + ((i - 40) >> 3));
+
 function encodeConfig() {
-  const b = new Uint8Array(13);
-  b[0] = state.rootMidi - 36;
+  const b = new Uint8Array(14);
+  b[0] = state.rootMidi - ROOT_BASE_MIDI;
   b[1] = state.scaleIdx;
   b[2] = state.tempo;
   b[3] = Math.round(state.density * 100);
   b[4] = Math.round(state.brightness * 100);
   b[5] = Math.round(state.spaciousness * 100);
   ALL_INST_KEYS.forEach((k, i) => {
-    if (manualEnabled[k]) b[6 + Math.floor(i / 8)] |= (1 << (i % 8));
+    if (manualEnabled[k]) b[instByte(i)] |= (1 << (i % 8));
   });
   b[11] = Math.round(state.harmonyLock * 100);
   b[12] = state.chordBeats;
@@ -871,9 +869,9 @@ function decodeConfig(str) {
     const pad = str + '==='.slice(0, (4 - str.length % 4) % 4);
     const b   = Uint8Array.from(atob(pad.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
     return {
-      r: b[0] + 36, s: b[1], t: b[2],
+      r: ROOT_BASE_MIDI + (b[0] % 12), s: b[1], t: b[2],
       d: b[3] / 100, b: b[4] / 100, p: b[5] / 100,
-      m: ALL_INST_KEYS.filter((_, i) => b[6 + Math.floor(i / 8)] & (1 << (i % 8))),
+      m: ALL_INST_KEYS.filter((_, i) => b[instByte(i)] & (1 << (i % 8))),
       hl: b[11] !== undefined ? b[11] / 100 : undefined,
       cb: b[12] !== undefined ? b[12] : undefined,
     };
@@ -891,7 +889,7 @@ function applyConfig(cfg) {
   state.harmonyLock  = cfg.hl ?? state.harmonyLock;
   state.chordBeats   = cfg.cb ?? state.chordBeats;
 
-  rootSelect.value        = state.rootMidi - 36;
+  rootSelect.value        = state.rootMidi - ROOT_BASE_MIDI;
   scaleSelect.value       = state.scaleIdx;
   bpmSlider.value         = state.tempo;
   bpmValue.textContent    = state.tempo;
