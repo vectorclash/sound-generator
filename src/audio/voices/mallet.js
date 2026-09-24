@@ -9,7 +9,7 @@ import { osc, gain, filter, send, perc } from '../synth.js';
 // and the next near 10× — the old version used 1:2:4, an octave that a
 // marimba bar doesn't have. Low bars ring longer than high ones, and a soft
 // yarn-mallet thump sits under the attack. Plays ostinato figures.
-const phraser = createPhraser({ name: 'mallet', base: () => register(24, 45, 62), style: 'active', ostinato: true, repeat: 0.8 });
+const phraser = createPhraser({ name: 'mallet', base: () => register(54, 28, 71), style: 'active', ostinato: true, repeat: 0.8 });
 
 function play(t, b) {
   const ev = phraser.next(b);

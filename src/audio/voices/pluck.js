@@ -29,7 +29,7 @@ function play(t, b) {
   const ring = Math.min(2.2, beat() * 4);
 
   if (i % 2 === 0) {
-    const bassRoot = fold(harmony.degreeNear(seg.degree, register(0, 40, 52)), 40, 52);
+    const bassRoot = fold(harmony.degreeNear(seg.degree, register(46, 28, 63)), 28, 63);
     const fifth    = fold(bassRoot + ((pcs[2] - pcs[0] + 12) % 12), bassRoot + 1, bassRoot + 12);
     string(t, (i / 2) % 2 === 0 ? bassRoot : fifth, rand(0.19, 0.23), ring);
     if (i === 0 && Math.random() < 0.4) string(t, upper(pcs)[2], rand(0.13, 0.16), ring);
@@ -41,7 +41,7 @@ function play(t, b) {
 }
 
 function upper(pcs) {
-  upperPrev = harmony.voice(pcs, upperPrev, register(24, 58, 70));
+  upperPrev = harmony.voice(pcs, upperPrev, register(64, 28, 81));
   return upperPrev;
 }
 

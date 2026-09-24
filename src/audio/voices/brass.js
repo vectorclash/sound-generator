@@ -11,7 +11,7 @@ import { osc, gain, filter, send, lfo } from '../synth.js';
 // scoops up from slightly flat as the lips lock onto the note, and vibrato
 // arrives late. Strong-beat notes are sometimes harmonised a third below,
 // the way a horn section voices a line.
-const phraser = createPhraser({ name: 'brass', base: () => register(24, 50, 64), lead: true, repeat: 0.65 });
+const phraser = createPhraser({ name: 'brass', base: () => register(58, 28, 75), lead: true, repeat: 0.65 });
 
 function horn(t, midi, dur, vel, level) {
   const bus = getVoiceBus('brass').dry;

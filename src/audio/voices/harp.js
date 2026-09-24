@@ -22,7 +22,7 @@ function string(t, midi, vel) {
 
 function play(t, b) {
   const seg  = harmony.at(b);
-  const base = register(12, 40, 55);
+  const base = register(50, 28, 67);
   if (Math.abs(b - seg.start) < 1e-6) {
     const notes = harmony.stack(b, base, 5 + Math.floor(Math.random() * 3));
     if (Math.random() < 0.35) notes.reverse();

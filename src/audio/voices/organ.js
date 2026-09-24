@@ -28,7 +28,7 @@ function play(t, b) {
   const len  = seg.end - b;
   const dur  = len * beat();
   const pcs  = harmony.pcs(seg.degree, seg.seventh ? 4 : 3);
-  const v    = harmony.voice(pcs, prev, register(16, 52, 68));
+  const v    = harmony.voice(pcs, prev, register(60, 28, 80));
   prev = v;
   for (const m of v) logNote('organ', t, m, dur, 0.6);
 

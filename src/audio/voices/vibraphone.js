@@ -10,7 +10,7 @@ import { osc, gain, filter, send, lfo, perc } from '../synth.js';
 // untuned bar, which the old version used and which rang out of tune against
 // the chords. The motor-driven discs in the resonators give the pulsing
 // tremolo; the pedal lets notes ring past their written length.
-const phraser = createPhraser({ name: 'vibraphone', base: () => register(36, 53, 70), lead: true });
+const phraser = createPhraser({ name: 'vibraphone', base: () => register(65, 28, 82), lead: true });
 let motor = 5.5;
 
 function play(t, b) {
@@ -28,6 +28,7 @@ function play(t, b) {
   if (motor) lfo(motor, 0.22, t, end).connect(trem.gain);
 
   for (const [ratio, level, decay] of [[1, 1, 1], [3.98, 0.22, 0.28], [9.95, 0.06, 0.07]]) {
+    if (hz * ratio > 16000) continue; // above hearing — and it would alias
     const o = osc('sine', hz * ratio, t, end);
     const e = gain(0);
     perc(e.gain, t, peak * level, ring * decay);

@@ -11,7 +11,7 @@ import { osc, gain, filter, send, perc } from '../synth.js';
 // bar, re-anchored to each chord). The tine is a near-sine with a brief
 // inharmonic overtone (clamped metal tines sit around 6× the fundamental), a
 // woody thump from the box, and sometimes a second thumb a third below.
-const phraser = createPhraser({ name: 'kalimba', base: () => register(36, 57, 72), style: 'active', ostinato: true, repeat: 0.85 });
+const phraser = createPhraser({ name: 'kalimba', base: () => register(65, 28, 80), style: 'active', ostinato: true, repeat: 0.85 });
 
 function tine(t, midi, vel) {
   const bus  = getVoiceBus('kalimba').dry;

@@ -24,7 +24,7 @@ let phrase  = -1;
 
 function chordNotes(b) {
   const seg  = harmony.at(b);
-  const base = register(24, 48, 64);
+  const base = register(56, 28, 73);
   if (seg.seventh) return harmony.stack(b, base, 4);
   const triad = harmony.stack(b, base, 3);
   return [...triad, triad[0] + 12];

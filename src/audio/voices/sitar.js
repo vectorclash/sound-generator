@@ -11,7 +11,7 @@ import { osc, gain, filter, send, shaper, pluckBuffer, playBuffer } from '../syn
 // Meend: when the previous note is close, the new note is plucked at the old
 // pitch and pulled to the new one, as a sitarist bends the string sideways.
 // Sympathetic (tarab) strings ring quietly when the played note matches them.
-const phraser = createPhraser({ name: 'sitar', base: () => register(24, 48, 62), lead: true });
+const phraser = createPhraser({ name: 'sitar', base: () => register(54, 28, 71), lead: true });
 let prev = null;
 
 function play(t, b) {

@@ -12,7 +12,7 @@ import { osc, gain, filter, perc, ahr, pluckBuffer, playBuffer } from '../synth.
 // that anticipation is most of what makes a bass line sound like a line.
 
 const STYLES = ['sub', 'plucked', 'walking', 'synth', 'rumble'];
-const LO = 28, HI = 55; // E1 … G3
+const LO = 26, HI = 59; // D1 … B3
 
 // Plucked (finger bass): one-bar rhythms of [beats, note]. R root, F fifth,
 // O octave, A approach into the next chord (a chord tone if none is coming).

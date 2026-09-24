@@ -14,7 +14,7 @@ let held = null; // gain stage of the sounding drone, so a key change can releas
 function play(t, b) {
   const len  = pick([8, 12, 16]);
   const dur  = len * beat();
-  const root = register(12, 33, 60);
+  const root = register(53, 28, 70);
   const bus  = getVoiceBus('drone').dry;
   const peak = rand(0.07, 0.1);
   const end  = t + dur + 2.6;

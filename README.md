@@ -24,7 +24,7 @@ Full control over every parameter. The panel is divided into three collapsible s
 | Control | Range | Effect |
 |---|---|---|
 | BPM | 50–140 | Tempo (changes take effect on the beat grid without drift) |
-| Octave | −3…+1 | Shifts every voice's register. Each instrument folds into the range it can actually sound in, so −3 deepens the mix without pushing the bass below hearing |
+| Octave | −3…+1 | Moves every voice by whole octaves from its home register. Instruments only stop at the edge of audibility (≈30–40 Hz) or where they'd turn piercing, so at −3 the low instruments hold at the floor (the bass never drops below D1) while the higher ones keep descending |
 | Density | 0–1 | Note volume and presence |
 | Brightness | 0–1 | Filter cutoffs (pad, drone, strings, brass, arpeggio, clavinet) and cymbal level |
 | Spaciousness | 0–1 | Reverb send on the sustained voices |
@@ -180,7 +180,7 @@ Seven scales defined as semitone intervals from the root:
 | Lydian | 0 2 4 6 7 9 11 | Raised 4th — floating, ethereal |
 | Mixolydian | 0 2 4 5 7 9 10 | Flat 7th — bright but unresolved |
 
-Pitches are standard MIDI note numbers (69 = A4 = 440 Hz): `hz = 440 × 2^((midi − 69) / 12)`. The tonic is kept within C3–B3; register comes from the octave setting, folded per instrument into its playable range.
+Pitches are standard MIDI note numbers (69 = A4 = 440 Hz): `hz = 440 × 2^((midi − 69) / 12)`. The tonic is kept within C3–B3; each instrument has a home register, and the octave setting moves it by whole octaves within that instrument's audible range.
 
 ### Plucked strings (Karplus–Strong)
 

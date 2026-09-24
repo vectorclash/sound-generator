@@ -11,7 +11,7 @@ function play(t, b) {
   const wait = pick([1, 2, 3, 4]);
   if (Math.random() < 0.4) return wait;
 
-  const notes = scaleNotes(register(24, 60, 76), currentScale(), 2);
+  const notes = scaleNotes(register(68, 28, 86), currentScale(), 2);
   const midi  = harmony.pickChordTone(notes, b);
   const hz    = midiToHz(midi);
   const dur   = rand(1.5, 4.0);

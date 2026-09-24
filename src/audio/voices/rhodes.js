@@ -51,7 +51,7 @@ function strike(t, b, lenBeats) {
     pcs = harmony.pcs(seg.degree, 4).slice(1);          // 3rd, 5th, 7th
     if ((ninth - root + 12) % 12 !== 1) pcs.push(ninth); // skip a ♭9 (avoid note)
   }
-  const v = harmony.voice(pcs, prev, register(12, 55, 66));
+  const v = harmony.voice(pcs, prev, register(60, 28, 77));
   prev = v;
   for (const m of v) logNote('rhodes', t, m, lenBeats * beat(), 0.75);
 

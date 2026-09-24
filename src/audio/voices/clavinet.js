@@ -11,7 +11,7 @@ import { gain, filter, pluckBuffer, playBuffer } from '../synth.js';
 // (twangy, nasal), cut short by a fast damper release, through a resonant
 // lowpass that snaps shut — the "quack" of funk clav. Plays repeating riffs
 // with occasional double-stops, like the right hand on "Superstition".
-const phraser = createPhraser({ name: 'clavinet', base: () => register(24, 48, 60), style: 'active', ostinato: true, repeat: 0.85 });
+const phraser = createPhraser({ name: 'clavinet', base: () => register(54, 28, 71), style: 'active', ostinato: true, repeat: 0.85 });
 
 function strike(t, midi, gate, vel) {
   logNote('clavinet', t, midi, gate, vel);

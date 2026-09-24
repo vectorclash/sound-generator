@@ -60,11 +60,15 @@ export function fold(midi, lo, hi) {
   return midi;
 }
 
-// Register (tonic note) for a voice: `offset` semitones above the global root,
-// folded into the range the instrument can actually sound in. The octave
-// control still moves every voice, but can't push a bass below hearing or a
-// bell into an ear-piercing register.
-export function register(offset, lo, hi) { return fold(state.rootBase + offset, lo, hi); }
+// Register for a voice: the tonic nearest the voice's `home` note (where it
+// sits at octave 0), moved by whole octaves with the Octave control, and kept
+// within [lo, hi] — the range the instrument can sensibly sound in. Limits are
+// wide so every octave setting is audible, only stopping a bass from dropping
+// below hearing or a bell from climbing into ear-piercing territory.
+export function register(home, lo, hi) {
+  const tonic = fold(state.rootMidi, home - 6, home + 5);
+  return fold(tonic + 12 * state.octaveShift, lo, hi);
+}
 
 export function scaleName() { return SCALE_NAMES[state.scaleIdx]; }
 

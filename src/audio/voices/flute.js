@@ -10,7 +10,7 @@ import { osc, gain, filter, send, lfo, perc } from '../synth.js';
 // just the attack — and vibrato that is partly pitch, partly amplitude, eased
 // in after the note has spoken. The attack starts slightly flat and settles,
 // as a flute's pitch does while the air column locks in.
-const phraser = createPhraser({ name: 'flute', base: () => register(36, 60, 74), lead: true });
+const phraser = createPhraser({ name: 'flute', base: () => register(66, 28, 83), lead: true });
 
 function play(t, b) {
   const ev = phraser.next(b);

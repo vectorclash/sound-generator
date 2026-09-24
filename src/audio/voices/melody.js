@@ -7,7 +7,7 @@ import { osc, gain, send, lfo } from '../synth.js';
 
 // Soft synth lead: triangle with a quiet octave partial and delayed vibrato.
 // One consistent timbre (it used to flip between sine and triangle per note).
-const phraser = createPhraser({ name: 'melody', base: () => register(24, 50, 69), lead: true });
+const phraser = createPhraser({ name: 'melody', base: () => register(64, 28, 81), lead: true });
 
 function play(t, b) {
   const ev = phraser.next(b);

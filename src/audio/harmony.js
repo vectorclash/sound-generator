@@ -1,4 +1,4 @@
-import { state, SCALE_NAMES, pick, fold, currentScale } from '../state.js';
+import { state, SCALE_NAMES, pick, fold, register, currentScale } from '../state.js';
 import { transport } from './transport.js';
 
 // ─── Shared harmonic context ────────────────────────────────────────────────
@@ -240,7 +240,7 @@ function movement(a, b) {
 // A gentle pull back toward the home register stops a long run of rising
 // fourths from creeping up to the top of the range.
 export function bassRoot(degree, prev, lo = 28, hi = 52) {
-  const home   = fold(state.rootBase, lo + 4, lo + 15);
+  const home   = register(42, lo, hi);
   const center = prev == null ? home : Math.round(prev * 0.6 + home * 0.4);
   return fold(harmony.degreeNear(degree, center), lo, hi);
 }
